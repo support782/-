@@ -1,0 +1,119 @@
+{
+  "entities": {
+    "Branch": {
+      "title": "Branch",
+      "description": "Represents a physical branch of the samity.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique branch ID." },
+        "name": { "type": "string", "description": "Branch name." },
+        "address": { "type": "string", "description": "Branch address." },
+        "code": { "type": "string", "description": "Short branch code (e.g., DHK)." },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "code"]
+    },
+    "User": {
+      "title": "User",
+      "description": "System user with specific roles.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["super_admin", "branch_manager", "field_officer", "member"] },
+        "branchId": { "type": "string", "description": "ID of the branch they belong to." },
+        "status": { "type": "string", "enum": ["active", "inactive"] }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Member": {
+      "title": "Member",
+      "description": "Registered member of the samity.",
+      "type": "object",
+      "properties": {
+        "memberId": { "type": "string", "description": "Generated ID (e.g., DHK-00001)." },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "nid": { "type": "string" },
+        "address": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "nomineeName": { "type": "string" },
+        "nomineeRelation": { "type": "string" },
+        "branchId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "active", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "phone", "branchId"]
+    },
+    "Loan": {
+      "title": "Loan",
+      "description": "Loan application and active loan details.",
+      "type": "object",
+      "properties": {
+        "memberId": { "type": "string" },
+        "amount": { "type": "number" },
+        "serviceCharge": { "type": "number" },
+        "totalPayable": { "type": "number" },
+        "installmentType": { "type": "string", "enum": ["daily", "weekly", "monthly"] },
+        "installments": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "active", "completed", "rejected"] },
+        "branchId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["memberId", "amount", "installmentType"]
+    },
+    "Savings": {
+      "title": "Savings",
+      "description": "Member savings accounts (General, DPS, FDR).",
+      "type": "object",
+      "properties": {
+        "memberId": { "type": "string" },
+        "type": { "type": "string", "enum": ["general", "dps", "fdr"] },
+        "balance": { "type": "number" },
+        "monthlyInstallment": { "type": "number", "description": "For DPS." },
+        "term": { "type": "number", "description": "Months for DPS/FDR." },
+        "interestRate": { "type": "number" },
+        "branchId": { "type": "string" }
+      },
+      "required": ["memberId", "type"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial transaction log.",
+      "type": "object",
+      "properties": {
+        "memberId": { "type": "string" },
+        "type": { "type": "string", "enum": ["deposit", "withdrawal", "installment", "fee"] },
+        "amount": { "type": "number" },
+        "method": { "type": "string", "enum": ["cash", "online"] },
+        "branchId": { "type": "string" },
+        "fieldOfficerId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["amount", "type", "method"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global system settings.",
+      "type": "object",
+      "properties": {
+        "smsAppKey": { "type": "string" },
+        "smsAuthKey": { "type": "string" },
+        "paymentMerchantId": { "type": "string" },
+        "lateFeeRate": { "type": "number" },
+        "sandboxMode": { "type": "boolean" }
+      }
+    }
+  },
+  "firestore": {
+    "/branches/{branchId}": { "schema": "Branch", "description": "Branches collection." },
+    "/users/{userId}": { "schema": "User", "description": "Users collection." },
+    "/members/{memberId}": { "schema": "Member", "description": "Members collection." },
+    "/loans/{loanId}": { "schema": "Loan", "description": "Loans collection." },
+    "/savings/{savingsId}": { "schema": "Savings", "description": "Savings accounts." },
+    "/transactions/{transactionId}": { "schema": "Transaction", "description": "Transactions log." },
+    "/settings/global": { "schema": "Settings", "description": "Global settings." }
+  }
+}

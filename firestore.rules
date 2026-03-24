@@ -1,0 +1,95 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: branches
+    // Fields: name, code, address, createdAt
+    //
+    // Collection: users
+    // Fields: uid, email, displayName, role, branchId, status
+    //
+    // Collection: members
+    // Fields: memberId, name, phone, nid, address, photoUrl, branchId, status, createdAt
+    //
+    // Collection: loans
+    // Fields: memberId, amount, serviceCharge, totalPayable, installmentType, installments, paidAmount, status, branchId, createdAt
+    //
+    // Collection: savings
+    // Fields: memberId, type, balance, monthlyInstallment, term, interestRate, branchId
+    //
+    // Collection: transactions
+    // Fields: memberId, type, amount, method, branchId, fieldOfficerId, timestamp
+    //
+    // Collection: settings
+    // Fields: smsAppKey, smsAuthKey, paymentMerchantId, lateFeeRate, sandboxMode
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin') ||
+        request.auth.token.email == "support@mail.euddok.com"
+      );
+    }
+
+    function isBranchManager() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'branch_manager';
+    }
+
+    function isFieldOfficer() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'field_officer';
+    }
+
+    function isMember() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'member';
+    }
+
+    function belongsToBranch(branchId) {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.branchId == branchId;
+    }
+
+    // Rules
+    match /branches/{branchId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow get: if isAuthenticated() && (request.auth.uid == userId || request.auth.token.email == "support@mail.euddok.com");
+      allow list: if isAuthenticated();
+      allow create, update, delete: if isAuthenticated() && (request.auth.uid == userId || request.auth.token.email == "support@mail.euddok.com");
+      allow read: if isAdmin();
+    }
+
+    match /members/{memberId} {
+      allow read: if isAuthenticated() && (isAdmin() || (isBranchManager() && belongsToBranch(resource.data.branchId)) || (isFieldOfficer() && belongsToBranch(resource.data.branchId)) || (isMember() && resource.data.uid == request.auth.uid));
+      allow create, update: if isAdmin() || (isBranchManager() && belongsToBranch(request.resource.data.branchId)) || (isFieldOfficer() && belongsToBranch(request.resource.data.branchId));
+    }
+
+    match /loans/{loanId} {
+      allow read: if isAuthenticated() && (isAdmin() || belongsToBranch(resource.data.branchId));
+      allow create, update: if isAdmin() || isBranchManager() || isFieldOfficer();
+    }
+
+    match /savings/{savingsId} {
+      allow read: if isAuthenticated() && (isAdmin() || belongsToBranch(resource.data.branchId));
+      allow create, update: if isAdmin() || isBranchManager() || isFieldOfficer();
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && (isAdmin() || belongsToBranch(resource.data.branchId));
+      allow create: if isAdmin() || isBranchManager() || isFieldOfficer() || isMember();
+    }
+
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}
