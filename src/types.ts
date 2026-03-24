@@ -2,11 +2,14 @@ export type UserRole = 'super_admin' | 'branch_manager' | 'field_officer' | 'mem
 
 export interface UserProfile {
   id: string;
-  email: string;
+  phone: string;
   displayName: string;
+  photoUrl?: string;
   role: UserRole;
   branchId?: string;
   status: 'active' | 'inactive';
+  kycStatus?: 'pending' | 'verified' | 'rejected';
+  aiVerificationResult?: string;
 }
 
 export interface Branch {
@@ -28,7 +31,9 @@ export interface Member {
   nomineeName: string;
   nomineeRelation: string;
   branchId: string;
-  status: 'pending' | 'active' | 'rejected';
+  status: 'pending' | 'active' | 'inactive' | 'rejected';
+  kycStatus?: 'pending' | 'verified' | 'rejected';
+  aiVerificationResult?: string;
   createdAt: string;
   uid?: string; // Linked Firebase Auth UID
 }
@@ -44,6 +49,8 @@ export interface Loan {
   paidAmount: number;
   status: 'pending' | 'active' | 'completed' | 'rejected';
   branchId: string;
+  applicationDate: string;
+  approvalDate?: string;
   createdAt: string;
 }
 
@@ -72,7 +79,9 @@ export interface Transaction {
 export interface GlobalSettings {
   smsAppKey: string;
   smsAuthKey: string;
-  paymentMerchantId: string;
+  paymentApiKey: string;
+  paymentSecretKey: string;
+  paymentBrandKey: string;
   lateFeeRate: number;
   sandboxMode: boolean;
   autoSmsReminders: boolean;

@@ -34,9 +34,10 @@ async function startServer() {
   await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT UNIQUE,
+      phone TEXT UNIQUE,
       password TEXT,
       displayName TEXT,
+      photoUrl TEXT,
       role TEXT DEFAULT 'member',
       status TEXT DEFAULT 'active',
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -77,6 +78,8 @@ async function startServer() {
       installments INTEGER,
       status TEXT DEFAULT 'pending',
       branchId TEXT,
+      applicationDate DATETIME DEFAULT CURRENT_TIMESTAMP,
+      approvalDate DATETIME,
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -102,6 +105,37 @@ async function startServer() {
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS loan_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      memberId TEXT,
+      amount REAL,
+      guarantorMobile TEXT,
+      guarantorAccepted BOOLEAN DEFAULT 0,
+      status TEXT DEFAULT 'pending',
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS kyc_data (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER UNIQUE,
+      status TEXT DEFAULT 'pending',
+      nidFrontUrl TEXT,
+      nidBackUrl TEXT,
+      selfieUrl TEXT,
+      aiVerificationResult TEXT,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (userId) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER UNIQUE,
+      depositEnabled BOOLEAN DEFAULT 1,
+      loanEnabled BOOLEAN DEFAULT 1,
+      kycEnabled BOOLEAN DEFAULT 1,
+      FOREIGN KEY (userId) REFERENCES users(id)
+    );
+
     CREATE TABLE IF NOT EXISTS settings (
       id TEXT PRIMARY KEY,
       data TEXT
@@ -116,14 +150,51 @@ async function startServer() {
       const defaultSettings = {
         smsAppKey: '7144aead-508a-4a98-a8c9-4027abd8971f',
         smsAuthKey: 'YqH6rZIUO0BbJB5ARcq91k5U7gftVOgT993cgokVzvCXKGsem5',
-        paymentMerchantId: '',
+        paymentApiKey: '',
+        paymentSecretKey: '',
+        paymentBrandKey: '',
         lateFeeRate: 10,
         sandboxMode: true,
         autoSmsReminders: false,
-        reminderDays: 3
+        reminderDays: 3,
+        openRouterApiKey: ''
       };
       await db.run("INSERT INTO settings (id, data) VALUES (?, ?)", ['global', JSON.stringify(defaultSettings)]);
       console.log("Default settings initialized.");
+    }
+
+    // Migration: Add photoUrl to users
+    try {
+      await db.exec("ALTER TABLE users ADD COLUMN photoUrl TEXT");
+      console.log("Added photoUrl column to users table.");
+    } catch (e: any) {
+      // Column might already exist
+    }
+
+    // Migration: Add phone to users
+    try {
+      await db.exec("ALTER TABLE users ADD COLUMN phone TEXT");
+      console.log("Added phone column to users table.");
+    } catch (e: any) {
+      // Column might already exist
+    }
+
+    // Migration: Add applicationDate and approvalDate to loans
+    try {
+      await db.exec("ALTER TABLE loans ADD COLUMN applicationDate DATETIME DEFAULT CURRENT_TIMESTAMP");
+      await db.exec("ALTER TABLE loans ADD COLUMN approvalDate DATETIME");
+      console.log("Added applicationDate and approvalDate columns to loans table.");
+    } catch (e: any) {
+      // Columns might already exist
+    }
+
+    // Migration: Add kycStatus and aiVerificationResult to members
+    try {
+      await db.exec("ALTER TABLE members ADD COLUMN kycStatus TEXT DEFAULT 'pending'");
+      await db.exec("ALTER TABLE members ADD COLUMN aiVerificationResult TEXT");
+      console.log("Added KYC columns to members table.");
+    } catch (e: any) {
+      // Columns might already exist
     }
 
   // Auth Middleware
@@ -140,36 +211,36 @@ async function startServer() {
 
   // Auth Routes
   app.post("/api/auth/register", async (req, res) => {
-    const { email, password, displayName } = req.body;
+    const { phone, password, displayName } = req.body;
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
       
       // Check if this is the first user
       const userCount = await db.get("SELECT COUNT(*) as count FROM users");
-      const role = (userCount.count === 0 || email === "support@mail.euddok.com") ? "super_admin" : "member";
+      const role = (userCount.count === 0 || phone === "01700000000") ? "super_admin" : "member";
 
       const result = await db.run(
-        "INSERT INTO users (email, password, displayName, role) VALUES (?, ?, ?, ?)",
-        [email, hashedPassword, displayName, role]
+        "INSERT INTO users (phone, password, displayName, role) VALUES (?, ?, ?, ?)",
+        [phone, hashedPassword, displayName, role]
       );
       
-      const user = { id: result.lastID, email, displayName, role };
+      const user = { id: result.lastID, phone, displayName, role };
       const token = jwt.sign(user, JWT_SECRET, { expiresIn: "7d" });
       
       res.cookie("token", token, { httpOnly: true, secure: true, sameSite: "none" });
       res.json({ user });
     } catch (error: any) {
       if (error.message.includes("UNIQUE constraint failed")) {
-        return res.status(400).json({ error: "Email already exists" });
+        return res.status(400).json({ error: "Phone number already exists" });
       }
       res.status(500).json({ error: "Registration failed" });
     }
   });
 
   app.post("/api/auth/login", async (req, res) => {
-    const { email, password } = req.body;
+    const { phone, password } = req.body;
     try {
-      const user = await db.get("SELECT * FROM users WHERE email = ?", [email]);
+      const user = await db.get("SELECT * FROM users WHERE phone = ?", [phone]);
       if (!user) return res.status(400).json({ error: "User not found" });
 
       const validPassword = await bcrypt.compare(password, user.password);
@@ -185,8 +256,35 @@ async function startServer() {
     }
   });
 
-  app.get("/api/auth/me", authenticateToken, (req: any, res) => {
-    res.json({ user: req.user });
+  app.get("/api/auth/me", authenticateToken, async (req: any, res) => {
+    try {
+      const user = await db.get("SELECT * FROM users WHERE id = ?", [req.user.id]);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      const { password: _, ...userWithoutPassword } = user;
+      res.json({ user: userWithoutPassword });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
+  app.put("/api/auth/profile", authenticateToken, async (req: any, res) => {
+    const { displayName, photoUrl } = req.body;
+    try {
+      await db.run(
+        "UPDATE users SET displayName = ?, photoUrl = ? WHERE id = ?",
+        [displayName, photoUrl, req.user.id]
+      );
+      const user = await db.get("SELECT * FROM users WHERE id = ?", [req.user.id]);
+      const { password: _, ...userWithoutPassword } = user;
+      
+      // Update token with new data
+      const token = jwt.sign(userWithoutPassword, JWT_SECRET, { expiresIn: "7d" });
+      res.cookie("token", token, { httpOnly: true, secure: true, sameSite: "none" });
+      
+      res.json({ user: userWithoutPassword });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update profile" });
+    }
   });
 
   app.post("/api/auth/logout", (req, res) => {
@@ -245,7 +343,12 @@ async function startServer() {
   // User Management Routes
   app.get("/api/users", authenticateToken, async (req, res) => {
     try {
-      const users = await db.all("SELECT id, email, displayName, role, status, createdAt FROM users ORDER BY createdAt DESC");
+      const users = await db.all(`
+        SELECT u.id, u.phone, u.displayName, u.role, u.status, u.createdAt, k.aiVerificationResult 
+        FROM users u 
+        LEFT JOIN kyc_data k ON u.id = k.userId 
+        ORDER BY u.createdAt DESC
+      `);
       res.json({ users });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch users" });
@@ -288,14 +391,14 @@ async function startServer() {
   });
 
   app.post("/api/members", authenticateToken, async (req, res) => {
-    const { name, phone, nid, address, branchId, nomineeName, nomineeRelation } = req.body;
+    const { name, phone, nid, address, branchId, nomineeName, nomineeRelation, photoUrl } = req.body;
     try {
       const memberId = `MEM-${Math.floor(10000 + Math.random() * 90000)}`;
       const result = await db.run(
-        "INSERT INTO members (memberId, name, phone, nid, address, branchId, nomineeName, nomineeRelation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [memberId, name, phone, nid, address, branchId, nomineeName, nomineeRelation]
+        "INSERT INTO members (memberId, name, phone, nid, address, branchId, nomineeName, nomineeRelation, photoUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [memberId, name, phone, nid, address, branchId, nomineeName, nomineeRelation, photoUrl]
       );
-      res.json({ id: result.lastID, memberId, name, phone, nid, address, branchId, nomineeName, nomineeRelation });
+      res.json({ id: result.lastID, memberId, name, phone, nid, address, branchId, nomineeName, nomineeRelation, photoUrl });
     } catch (error: any) {
       if (error.message.includes("UNIQUE constraint failed")) {
         return res.status(400).json({ error: "Phone or NID already exists" });
@@ -305,13 +408,13 @@ async function startServer() {
   });
 
   app.put("/api/members/:id", authenticateToken, async (req, res) => {
-    const { name, phone, nid, address, branchId, status, nomineeName, nomineeRelation } = req.body;
+    const { name, phone, nid, address, branchId, status, nomineeName, nomineeRelation, photoUrl } = req.body;
     try {
       await db.run(
-        "UPDATE members SET name = ?, phone = ?, nid = ?, address = ?, branchId = ?, status = ?, nomineeName = ?, nomineeRelation = ? WHERE id = ?",
-        [name, phone, nid, address, branchId, status || 'active', nomineeName, nomineeRelation, req.params.id]
+        "UPDATE members SET name = ?, phone = ?, nid = ?, address = ?, branchId = ?, status = ?, nomineeName = ?, nomineeRelation = ?, photoUrl = ? WHERE id = ?",
+        [name, phone, nid, address, branchId, status || 'active', nomineeName, nomineeRelation, photoUrl, req.params.id]
       );
-      res.json({ id: req.params.id, name, phone, nid, address, branchId, status, nomineeName, nomineeRelation });
+      res.json({ id: req.params.id, name, phone, nid, address, branchId, status, nomineeName, nomineeRelation, photoUrl });
     } catch (error) {
       res.status(500).json({ error: "Failed to update member" });
     }
@@ -336,14 +439,36 @@ async function startServer() {
     }
   });
 
+  app.get("/api/loans/:id/details", authenticateToken, async (req, res) => {
+    try {
+      const loan = await db.get("SELECT * FROM loans WHERE id = ?", [req.params.id]);
+      if (!loan) return res.status(404).json({ error: "Loan not found" });
+      
+      const member = await db.get("SELECT * FROM members WHERE memberId = ?", [loan.memberId]);
+      
+      // Get all transactions related to this loan (installments)
+      // Since we don't have a loanId column in transactions, we'll fetch installments for this member
+      // and assume they are for the active loan. In a real app, transactions should link to loanId.
+      // For now, let's just fetch recent installments for the member.
+      const transactions = await db.all(
+        "SELECT * FROM transactions WHERE memberId = ? AND type = 'installment' ORDER BY timestamp DESC",
+        [loan.memberId]
+      );
+      
+      res.json({ loan, member, transactions });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch loan details" });
+    }
+  });
+
   app.post("/api/loans", authenticateToken, async (req, res) => {
-    const { memberId, amount, serviceCharge, totalPayable, installmentType, installments, branchId } = req.body;
+    const { memberId, amount, serviceCharge, totalPayable, installmentType, installments, branchId, applicationDate } = req.body;
     try {
       const result = await db.run(
-        "INSERT INTO loans (memberId, amount, serviceCharge, totalPayable, installmentType, installments, branchId) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [memberId, amount, serviceCharge, totalPayable, installmentType, installments, branchId]
+        "INSERT INTO loans (memberId, amount, serviceCharge, totalPayable, installmentType, installments, branchId, applicationDate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [memberId, amount, serviceCharge, totalPayable, installmentType, installments, branchId, applicationDate || new Date().toISOString()]
       );
-      res.json({ id: result.lastID, memberId, amount, serviceCharge, totalPayable, installmentType, installments, branchId });
+      res.json({ id: result.lastID, memberId, amount, serviceCharge, totalPayable, installmentType, installments, branchId, applicationDate });
     } catch (error) {
       res.status(500).json({ error: "Failed to create loan application" });
     }
@@ -362,7 +487,11 @@ async function startServer() {
         return res.status(404).json({ error: "Loan not found" });
       }
 
-      await db.run("UPDATE loans SET status = ? WHERE id = ?", [status, req.params.id]);
+      if (status === 'active') {
+        await db.run("UPDATE loans SET status = ?, approvalDate = ? WHERE id = ?", [status, new Date().toISOString(), req.params.id]);
+      } else {
+        await db.run("UPDATE loans SET status = ? WHERE id = ?", [status, req.params.id]);
+      }
       
       // Send SMS if status is active or rejected
       if ((status === 'active' || status === 'rejected') && loan.phone) {
@@ -394,6 +523,122 @@ async function startServer() {
     }
   });
 
+  // Member lookup by phone
+  app.get("/api/members/by-phone/:phone", authenticateToken, async (req, res) => {
+    try {
+      const member = await db.get("SELECT * FROM members WHERE phone = ?", [req.params.phone]);
+      if (!member) return res.status(404).json({ error: "Member not found" });
+      res.json({ member });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch member" });
+    }
+  });
+
+  // Loan request routes
+  app.post("/api/loan-requests", authenticateToken, async (req, res) => {
+    const { memberId, amount, guarantorMobile } = req.body;
+    try {
+      const result = await db.run(
+        "INSERT INTO loan_requests (memberId, amount, guarantorMobile) VALUES (?, ?, ?)",
+        [memberId, amount, guarantorMobile]
+      );
+      
+      // Send notification to guarantor
+      const settingsRow = await db.get("SELECT data FROM settings WHERE id = 'global'");
+      const settings = settingsRow ? JSON.parse(settingsRow.data) : {};
+      
+      try {
+        await axios.post("https://sms.euddok.com/api/create-message", {
+          appkey: settings.smsAppKey || process.env.SMS_APP_KEY || "7144aead-508a-4a98-a8c9-4027abd8971f",
+          authkey: settings.smsAuthKey || process.env.SMS_AUTH_KEY || "YqH6rZIUO0BbJB5ARcq91k5U7gftVOgT993cgokVzvCXKGsem5",
+          to: guarantorMobile,
+          message: `You have been requested to be a guarantor for a loan request (ID: ${result.lastID}). Please accept by visiting: ${process.env.APP_URL || 'https://ais-dev-m2rouzzmoso35i7ldnrobx-762651086413.asia-southeast1.run.app'}/guarantor-accept/${result.lastID}`,
+          sandbox: settings.sandboxMode || false
+        });
+      } catch (smsError: any) {
+        console.error("Failed to send guarantor SMS:", smsError.response?.data || smsError.message);
+      }
+
+      res.json({ id: result.lastID, memberId, amount, guarantorMobile, status: 'pending' });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to submit loan request" });
+    }
+  });
+
+  app.post("/api/loan-requests/:id/accept-guarantor", async (req, res) => {
+    try {
+      await db.run("UPDATE loan_requests SET guarantorAccepted = 1 WHERE id = ?", [req.params.id]);
+      res.json({ message: "Guarantor accepted successfully" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to accept guarantor" });
+    }
+  });
+
+  // KYC Routes
+  app.get("/api/kyc/status", authenticateToken, async (req: any, res: any) => {
+    const userId = req.user.id;
+    try {
+      const kyc = await db.get("SELECT * FROM kyc_data WHERE userId = ?", [userId]);
+      res.json({ kyc });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch KYC status" });
+    }
+  });
+
+  app.post("/api/kyc/submit", authenticateToken, async (req: any, res: any) => {
+    const { nidFront, nidBack, selfie, status, aiResult } = req.body;
+    const userId = req.user.id;
+    try {
+      await db.run(
+        "INSERT OR REPLACE INTO kyc_data (userId, nidFrontUrl, nidBackUrl, selfieUrl, status, aiVerificationResult) VALUES (?, ?, ?, ?, ?, ?)",
+        [userId, nidFront, nidBack, selfie, status, aiResult]
+      );
+      
+      // Also update member table if exists
+      const user = await db.get("SELECT phone FROM users WHERE id = ?", [userId]);
+      if (user) {
+        await db.run(
+          "UPDATE members SET kycStatus = ?, aiVerificationResult = ? WHERE phone = ?",
+          [status, aiResult, user.phone]
+        );
+      }
+      
+      res.json({ message: "KYC submitted successfully" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Failed to submit KYC" });
+    }
+  });
+
+  // Notification Settings Routes
+  app.get("/api/notification-settings", authenticateToken, async (req: any, res: any) => {
+    const userId = req.user.id;
+    try {
+      let settings = await db.get("SELECT * FROM notification_settings WHERE userId = ?", [userId]);
+      if (!settings) {
+        await db.run("INSERT INTO notification_settings (userId) VALUES (?)", [userId]);
+        settings = await db.get("SELECT * FROM notification_settings WHERE userId = ?", [userId]);
+      }
+      res.json({ settings });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch settings" });
+    }
+  });
+
+  app.put("/api/notification-settings", authenticateToken, async (req: any, res: any) => {
+    const userId = req.user.id;
+    const { depositEnabled, loanEnabled, kycEnabled } = req.body;
+    try {
+      await db.run(
+        "UPDATE notification_settings SET depositEnabled = ?, loanEnabled = ?, kycEnabled = ? WHERE userId = ?",
+        [depositEnabled, loanEnabled, kycEnabled, userId]
+      );
+      res.json({ message: "Settings updated" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update settings" });
+    }
+  });
+
   // Savings Routes
   app.get("/api/savings", authenticateToken, async (req, res) => {
     try {
@@ -404,9 +649,19 @@ async function startServer() {
     }
   });
 
-  app.post("/api/savings", authenticateToken, async (req, res) => {
+  app.post("/api/savings", authenticateToken, async (req: any, res: any) => {
     const { memberId, type, initialDeposit, branchId } = req.body;
+    const { id: userId, role, phone } = req.user;
+
     try {
+      // If member, they can only open for themselves
+      if (role === 'member') {
+        const member = await db.get("SELECT memberId FROM members WHERE phone = ?", [phone]);
+        if (!member || member.memberId !== memberId) {
+          return res.status(403).json({ error: "Members can only open accounts for themselves" });
+        }
+      }
+
       const result = await db.run(
         "INSERT INTO savings_accounts (memberId, type, balance) VALUES (?, ?, ?)",
         [memberId, type, initialDeposit || 0]
@@ -466,8 +721,8 @@ async function startServer() {
                 message: `Congratulations! Your loan (ID: ${loanId}) has been fully repaid. Thank you for being with eUddok Smart Samity.`,
                 sandbox: settings.sandboxMode || false
               });
-            } catch (smsError) {
-              console.error("Failed to send completion SMS:", smsError);
+            } catch (smsError: any) {
+              console.error("Failed to send completion SMS:", smsError.response?.data || smsError.message);
             }
           }
         }
@@ -482,6 +737,112 @@ async function startServer() {
       res.json({ id: result.lastID, memberId, type, amount, method, loanId, savingsAccountId, branchId, fieldOfficerId });
     } catch (error) {
       res.status(500).json({ error: "Failed to record transaction" });
+    }
+  });
+
+  // Payment Routes
+  app.post("/api/pay/create", authenticateToken, async (req, res) => {
+    try {
+      const { amount, memberId, loanId, branchId, type } = req.body;
+      const settingsRow = await db.get("SELECT data FROM settings WHERE id = 'global'");
+      const settings = settingsRow ? JSON.parse(settingsRow.data) : {};
+
+      if (!settings.paymentApiKey || !settings.paymentSecretKey || !settings.paymentBrandKey) {
+        return res.status(400).json({ error: "Payment gateway is not configured" });
+      }
+
+      const member = await db.get("SELECT * FROM members WHERE memberId = ?", [memberId]);
+      if (!member) {
+        return res.status(404).json({ error: "Member not found" });
+      }
+
+      const host = req.get('host');
+      const protocol = req.protocol;
+      const baseUrl = `${protocol}://${host}`;
+
+      const payload = {
+        cus_name: member.name,
+        cus_email: `${member.phone}@euddok.com`,
+        amount: amount.toString(),
+        success_url: `${baseUrl}/api/pay/callback?status=success`,
+        cancel_url: `${baseUrl}/api/pay/callback?status=cancel`,
+        metadata: {
+          memberId,
+          loanId,
+          branchId,
+          type,
+          fieldOfficerId: (req as any).user.id
+        }
+      };
+
+      const response = await axios.post('https://pay.euddok.com/pay/api/payment/create', payload, {
+        headers: {
+          'API-KEY': settings.paymentApiKey,
+          'SECRET-KEY': settings.paymentSecretKey,
+          'BRAND-KEY': settings.paymentBrandKey,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data && response.data.payment_url) {
+        res.json({ payment_url: response.data.payment_url });
+      } else {
+        res.status(400).json({ error: "Failed to generate payment URL" });
+      }
+    } catch (error) {
+      console.error("Payment create error:", error);
+      res.status(500).json({ error: "Failed to initiate payment" });
+    }
+  });
+
+  app.get("/api/pay/callback", async (req, res) => {
+    const { status, transactionId } = req.query;
+
+    if (status !== 'success' || !transactionId) {
+      return res.redirect('/loans?payment=failed');
+    }
+
+    try {
+      const settingsRow = await db.get("SELECT data FROM settings WHERE id = 'global'");
+      const settings = settingsRow ? JSON.parse(settingsRow.data) : {};
+
+      const response = await axios.post('https://pay.euddok.com/pay/api/payment/verify', {
+        transaction_id: transactionId
+      }, {
+        headers: {
+          'API-KEY': settings.paymentApiKey,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = response.data;
+      if (data.status === 'COMPLETED') {
+        const metadata = data.metadata || {};
+        const { memberId, loanId, branchId, type, fieldOfficerId } = metadata;
+
+        if (type === 'installment' && loanId) {
+          // Record transaction
+          await db.run(
+            "INSERT INTO transactions (memberId, type, amount, method, loanId, branchId, fieldOfficerId) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [memberId, type, parseFloat(data.amount), 'online', loanId, branchId, fieldOfficerId]
+          );
+
+          // Update loan paid amount
+          await db.run("UPDATE loans SET paidAmount = paidAmount + ? WHERE id = ?", [parseFloat(data.amount), loanId]);
+          
+          // Check if loan is completed
+          const loan = await db.get("SELECT * FROM loans WHERE id = ?", [loanId]);
+          if (loan && loan.paidAmount >= loan.totalPayable) {
+            await db.run("UPDATE loans SET status = 'completed' WHERE id = ?", [loanId]);
+          }
+        }
+        res.redirect('/loans?payment=success');
+      } else {
+        res.redirect('/loans?payment=failed');
+      }
+    } catch (error) {
+      console.error("Payment verify error:", error);
+      res.redirect('/loans?payment=error');
     }
   });
 

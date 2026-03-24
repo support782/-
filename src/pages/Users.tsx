@@ -5,7 +5,7 @@ import {
   Search, 
   Edit2, 
   X,
-  Mail,
+  Phone,
   Shield,
   CheckCircle2,
   XCircle
@@ -74,7 +74,7 @@ export default function Users() {
 
   const filteredUsers = users.filter(u => 
     u.displayName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    u.email.toLowerCase().includes(searchTerm.toLowerCase())
+    u.phone.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const roleColors: Record<UserRole, string> = {
@@ -99,7 +99,7 @@ export default function Users() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input
               type="text"
-              placeholder="Search by name or email..."
+              placeholder="Search by name or phone..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
@@ -128,7 +128,7 @@ export default function Users() {
                       <div>
                         <p className="text-sm font-bold text-slate-900">{user.displayName}</p>
                         <div className="flex items-center text-xs text-slate-500">
-                          <Mail size={12} className="mr-1" /> {user.email}
+                          <Phone size={12} className="mr-1" /> {user.phone}
                         </div>
                       </div>
                     </div>
@@ -217,6 +217,12 @@ export default function Users() {
                     <option value="inactive">Inactive</option>
                   </select>
                 </div>
+                {editingUser?.aiVerificationResult && (
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <p className="text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">AI Verification Result</p>
+                    <p className="text-sm text-slate-600">{editingUser.aiVerificationResult}</p>
+                  </div>
+                )}
                 <div className="flex items-center justify-end space-x-3 pt-4">
                   <button
                     type="button"

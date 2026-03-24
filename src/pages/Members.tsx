@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { 
   Users, 
@@ -18,18 +19,30 @@ import {
   Eye,
   History,
   PiggyBank,
-  HandCoins
+  HandCoins,
+  Printer,
+  Camera,
+  ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Member, Branch, Loan, Transaction } from '../types';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { QRCodeSVG } from 'qrcode.react';
+import { usePermissions } from '../hooks/usePermissions';
+import MemberIdCard from '../components/MemberIdCard';
 
 export default function Members() {
+  const { hasPermission } = usePermissions();
   const [members, setMembers] = useState<Member[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterBranch, setFilterBranch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
@@ -46,7 +59,8 @@ export default function Members() {
     address: '',
     nomineeName: '',
     nomineeRelation: '',
-    branchId: ''
+    branchId: '',
+    photoUrl: ''
   });
 
   useEffect(() => {
@@ -86,7 +100,7 @@ export default function Members() {
       }
       setIsModalOpen(false);
       setEditingMember(null);
-      setFormData({ name: '', phone: '', nid: '', address: '', nomineeName: '', nomineeRelation: '', branchId: branches[0]?.id || '' });
+      setFormData({ name: '', phone: '', nid: '', address: '', nomineeName: '', nomineeRelation: '', branchId: branches[0]?.id || '', photoUrl: '' });
       fetchData();
     } catch (error: any) {
       console.error(error);
@@ -105,9 +119,25 @@ export default function Members() {
       address: member.address,
       nomineeName: member.nomineeName || '',
       nomineeRelation: member.nomineeRelation || '',
-      branchId: member.branchId
+      branchId: member.branchId,
+      photoUrl: member.photoUrl || ''
     });
     setIsModalOpen(true);
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 1024 * 1024) { // 1MB limit
+        toast.error('Image size must be less than 1MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, photoUrl: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleViewDetails = async (member: Member) => {
@@ -136,11 +166,41 @@ export default function Members() {
     }
   };
 
-  const filteredMembers = members.filter(m => 
-    m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    m.memberId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.phone.includes(searchTerm)
-  );
+  const handleStatusUpdate = async (memberId: string, newStatus: string) => {
+    try {
+      const memberToUpdate = members.find(m => m.id === memberId);
+      if (!memberToUpdate) return;
+      await axios.put(`/api/members/${memberId}`, { ...memberToUpdate, status: newStatus });
+      toast.success(`Member status updated to ${newStatus}`);
+      setSelectedMember(prev => prev ? { ...prev, status: newStatus as any } : null);
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to update status');
+    }
+  };
+
+  const filteredMembers = members.filter(m => {
+    const matchesSearch = m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      m.memberId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.phone.includes(searchTerm);
+    
+    const matchesBranch = filterBranch ? m.branchId === filterBranch : true;
+    const matchesStatus = filterStatus ? m.status === filterStatus : true;
+    
+    let matchesDate = true;
+    if (filterStartDate && filterEndDate) {
+      const memberDate = new Date(m.createdAt).getTime();
+      const start = new Date(filterStartDate).getTime();
+      const end = new Date(filterEndDate).getTime() + 86400000; // Include the end day
+      matchesDate = memberDate >= start && memberDate <= end;
+    } else if (filterStartDate) {
+      matchesDate = new Date(m.createdAt).getTime() >= new Date(filterStartDate).getTime();
+    } else if (filterEndDate) {
+      matchesDate = new Date(m.createdAt).getTime() <= new Date(filterEndDate).getTime() + 86400000;
+    }
+
+    return matchesSearch && matchesBranch && matchesStatus && matchesDate;
+  });
 
   return (
     <div className="space-y-6">
@@ -149,31 +209,99 @@ export default function Members() {
           <h1 className="text-2xl font-bold text-slate-900">Member Management</h1>
           <p className="text-slate-500">Manage your samity members and their profiles.</p>
         </div>
-        <button
-          onClick={() => { setEditingMember(null); setIsModalOpen(true); }}
-          className="inline-flex items-center justify-center space-x-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
-        >
-          <Plus size={20} />
-          <span>Register Member</span>
-        </button>
+        {hasPermission('create', 'members') && (
+          <button
+            onClick={() => { setEditingMember(null); setIsModalOpen(true); }}
+            className="inline-flex items-center justify-center space-x-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+          >
+            <Plus size={20} />
+            <span>Register Member</span>
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input
-              type="text"
-              placeholder="Search by name, ID or phone..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-            />
+        <div className="p-4 border-b border-slate-100 flex flex-col gap-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input
+                type="text"
+                placeholder="Search by name, ID or phone..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              />
+            </div>
+            <button 
+              onClick={() => setShowFilters(!showFilters)}
+              className={`inline-flex items-center space-x-2 px-4 py-2 border rounded-xl font-medium transition-all ${
+                showFilters || filterBranch || filterStatus || filterStartDate || filterEndDate
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700' 
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Filter size={18} />
+              <span>Filters</span>
+            </button>
           </div>
-          <button className="inline-flex items-center space-x-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 font-medium hover:bg-slate-100 transition-all">
-            <Filter size={18} />
-            <span>Filters</span>
-          </button>
+
+          <AnimatePresence>
+            {showFilters && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4 border-t border-slate-100 overflow-hidden"
+              >
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Branch</label>
+                  <select
+                    value={filterBranch}
+                    onChange={(e) => setFilterBranch(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                  >
+                    <option value="">All Branches</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Status</label>
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="pending">Pending</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Start Date</label>
+                  <input
+                    type="date"
+                    value={filterStartDate}
+                    onChange={(e) => setFilterStartDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">End Date</label>
+                  <input
+                    type="date"
+                    value={filterEndDate}
+                    onChange={(e) => setFilterEndDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <div className="overflow-x-auto">
@@ -192,9 +320,15 @@ export default function Members() {
                 <tr key={member.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold">
-                        {member.name[0]}
-                      </div>
+                      {member.photoUrl ? (
+                        <div className="w-10 h-10 rounded-full overflow-hidden border border-slate-200">
+                          <img src={member.photoUrl} alt={member.name} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold">
+                          {member.name[0]}
+                        </div>
+                      )}
                       <div>
                         <p className="text-sm font-bold text-slate-900">{member.name}</p>
                         <p className="text-xs text-slate-500">{member.memberId}</p>
@@ -219,10 +353,12 @@ export default function Members() {
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       member.status === 'active' ? 'bg-emerald-100 text-emerald-800' :
-                      member.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                      member.status === 'inactive' ? 'bg-amber-100 text-amber-800' :
+                      member.status === 'pending' ? 'bg-blue-100 text-blue-800' :
                       'bg-rose-100 text-rose-800'
                     }`}>
                       {member.status === 'active' ? <CheckCircle size={12} className="mr-1" /> :
+                       member.status === 'inactive' ? <Clock size={12} className="mr-1" /> :
                        member.status === 'pending' ? <Clock size={12} className="mr-1" /> :
                        <XCircle size={12} className="mr-1" />}
                       {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
@@ -233,12 +369,16 @@ export default function Members() {
                       <button onClick={() => handleViewDetails(member)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="View Details">
                         <Eye size={18} />
                       </button>
-                      <button onClick={() => handleEdit(member)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="Edit">
-                        <Edit2 size={18} />
-                      </button>
-                      <button onClick={() => handleDelete(member.id)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all" title="Delete">
-                        <Trash2 size={18} />
-                      </button>
+                      {hasPermission('update', 'members') && (
+                        <button onClick={() => handleEdit(member)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="Edit">
+                          <Edit2 size={18} />
+                        </button>
+                      )}
+                      {hasPermission('delete', 'members') && (
+                        <button onClick={() => handleDelete(member.id)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all" title="Delete">
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -265,22 +405,77 @@ export default function Members() {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             >
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-600 text-white">
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-600 text-white print:hidden">
                 <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-xl font-bold">
-                    {selectedMember.name[0]}
-                  </div>
+                  {selectedMember.photoUrl ? (
+                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/20">
+                      <img src={selectedMember.photoUrl} alt={selectedMember.name} className="w-full h-full object-cover" />
+                    </div>
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold">
+                      {selectedMember.name[0]}
+                    </div>
+                  )}
                   <div>
-                    <h2 className="text-xl font-bold">{selectedMember.name}</h2>
+                    <h2 className="text-2xl font-bold">{selectedMember.name}</h2>
                     <p className="text-sm text-white/80">{selectedMember.memberId} • {selectedMember.phone}</p>
+                    <div className="flex items-center space-x-2 mt-2">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        selectedMember.kycStatus === 'verified' ? 'bg-emerald-400/20 text-emerald-100 border border-emerald-400/30' :
+                        selectedMember.kycStatus === 'rejected' ? 'bg-rose-400/20 text-rose-100 border border-rose-400/30' :
+                        'bg-amber-400/20 text-amber-100 border border-amber-400/30'
+                      }`}>
+                        {selectedMember.kycStatus || 'Pending'}
+                      </span>
+                      {(selectedMember.kycStatus === 'pending' || selectedMember.kycStatus === 'rejected') && (
+                        <Link to="/kyc" className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full hover:bg-white/30 transition-all">
+                          Verify KYC
+                        </Link>
+                      )}
+                      {hasPermission('update', 'members') ? (
+                        <select
+                          value={selectedMember.status}
+                          onChange={(e) => handleStatusUpdate(selectedMember.id, e.target.value)}
+                          className="bg-white/10 border border-white/20 text-white text-xs rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-white/50"
+                        >
+                          <option value="active" className="text-slate-900">Active</option>
+                          <option value="inactive" className="text-slate-900">Inactive</option>
+                          <option value="rejected" className="text-slate-900">Rejected</option>
+                        </select>
+                      ) : (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          selectedMember.status === 'active' ? 'bg-emerald-400/20 text-emerald-100 border border-emerald-400/30' :
+                          selectedMember.status === 'inactive' ? 'bg-amber-400/20 text-amber-100 border border-amber-400/30' :
+                          'bg-rose-400/20 text-rose-100 border border-rose-400/30'
+                        }`}>
+                          {selectedMember.status}
+                        </span>
+                      )}
+                    </div>
+                    {selectedMember.aiVerificationResult && (
+                      <div className="mt-4 p-3 bg-white/10 rounded-lg text-xs text-white/90">
+                        <p className="font-bold mb-1">AI Verification Result:</p>
+                        <p>{selectedMember.aiVerificationResult}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <button onClick={() => setIsDetailsModalOpen(false)} className="p-2 hover:bg-white/10 rounded-lg transition-all">
-                  <X size={24} />
-                </button>
+                <div className="flex items-center space-x-6">
+                  <div className="bg-white p-2 rounded-xl hidden md:block">
+                    <QRCodeSVG value={`member:${selectedMember.memberId}`} size={80} />
+                  </div>
+                  <button onClick={() => window.print()} className="p-2 hover:bg-white/10 rounded-lg transition-all self-start print:hidden" title="Print ID Card">
+                    <Printer size={24} />
+                  </button>
+                  <button onClick={() => setIsDetailsModalOpen(false)} className="p-2 hover:bg-white/10 rounded-lg transition-all self-start print:hidden">
+                    <X size={24} />
+                  </button>
+                </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-8">
+              <MemberIdCard member={selectedMember} />
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-8 print:hidden">
                 {loading ? (
                   <div className="flex flex-col items-center justify-center py-12 space-y-4">
                     <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-indigo-600"></div>
@@ -437,21 +632,21 @@ export default function Members() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-bold text-slate-700">Phone Number</label>
-                    <input
-                      type="tel"
-                      required
-                      value={formData.phone}
-                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                      placeholder="017XXXXXXXX"
-                    />
+                      <input
+                        type="tel"
+                        required
+                        value={formData.phone || ''}
+                        onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                        placeholder="017XXXXXXXX"
+                      />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-bold text-slate-700">NID Number</label>
                     <input
                       type="text"
                       required
-                      value={formData.nid}
+                      value={formData.nid || ''}
                       onChange={(e) => setFormData({...formData, nid: e.target.value})}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                       placeholder="National ID number"
@@ -484,6 +679,36 @@ export default function Members() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-sm font-bold text-slate-700">Member Photo</label>
+                    <div className="flex items-center space-x-4">
+                      {formData.photoUrl ? (
+                        <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200">
+                          <img src={formData.photoUrl} alt="Preview" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, photoUrl: '' }))}
+                            className="absolute top-1 right-1 bg-white/80 rounded-full p-1 text-rose-600 hover:bg-white"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-20 h-20 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 bg-slate-50">
+                          <Users size={24} />
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handlePhotoUpload}
+                          className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">Max size: 1MB. Recommended format: JPG, PNG.</p>
+                      </div>
+                    </div>
+                  </div>
                   <div className="space-y-2">
                     <label className="text-sm font-bold text-slate-700">Nominee Name</label>
                     <input

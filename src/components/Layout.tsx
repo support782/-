@@ -13,7 +13,9 @@ import {
   LogOut,
   Menu,
   X,
-  UserCircle
+  UserCircle,
+  ShieldCheck,
+  Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -72,6 +74,8 @@ export default function Layout({ children }: LayoutProps) {
     { name: 'Loans', path: '/loans', icon: HandCoins, roles: ['super_admin', 'branch_manager', 'field_officer', 'member'] },
     { name: 'Savings', path: '/savings', icon: PiggyBank, roles: ['super_admin', 'branch_manager', 'field_officer', 'member'] },
     { name: 'Transactions', path: '/transactions', icon: History, roles: ['super_admin', 'branch_manager', 'field_officer', 'member'] },
+    { name: 'KYC Verification', path: '/kyc', icon: ShieldCheck, roles: ['super_admin', 'branch_manager', 'field_officer', 'member'] },
+    { name: 'Notifications', path: '/notification-settings', icon: Bell, roles: ['super_admin', 'branch_manager', 'field_officer', 'member'] },
     { name: 'Settings', path: '/settings', icon: Settings, roles: ['super_admin'] },
   ];
 
@@ -118,15 +122,19 @@ export default function Layout({ children }: LayoutProps) {
           ))}
         </nav>
         <div className="p-4 border-t border-slate-100">
-          <div className="flex items-center space-x-3 p-3 mb-2">
-            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-              {user?.displayName?.[0] || 'U'}
+          <Link to="/profile" className="flex items-center space-x-3 p-3 mb-2 hover:bg-slate-50 rounded-lg transition-colors">
+            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold overflow-hidden">
+              {user?.photoUrl ? (
+                <img src={user.photoUrl} alt={user.displayName} className="w-full h-full object-cover" />
+              ) : (
+                user?.displayName?.[0] || 'U'
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-slate-900 truncate">{user?.displayName}</p>
               <p className="text-xs text-slate-500 truncate capitalize">{user?.role.replace('_', ' ')}</p>
             </div>
-          </div>
+          </Link>
           <button
             onClick={handleLogout}
             className="flex items-center space-x-3 w-full p-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
@@ -187,6 +195,19 @@ export default function Layout({ children }: LayoutProps) {
                 ))}
               </nav>
               <div className="p-4 border-t border-slate-100">
+                <Link to="/profile" onClick={() => setIsSidebarOpen(false)} className="flex items-center space-x-3 p-3 mb-2 hover:bg-slate-50 rounded-lg transition-colors">
+                  <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold overflow-hidden">
+                    {user?.photoUrl ? (
+                      <img src={user.photoUrl} alt={user.displayName} className="w-full h-full object-cover" />
+                    ) : (
+                      user?.displayName?.[0] || 'U'
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 truncate">{user?.displayName}</p>
+                    <p className="text-xs text-slate-500 truncate capitalize">{user?.role.replace('_', ' ')}</p>
+                  </div>
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="flex items-center space-x-3 w-full p-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors"

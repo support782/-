@@ -8,10 +8,10 @@ service cloud.firestore {
     // Fields: name, code, address, createdAt
     //
     // Collection: users
-    // Fields: uid, email, displayName, role, branchId, status
+    // Fields: uid, phone, displayName, role, branchId, status, kycStatus, aiVerificationResult
     //
     // Collection: members
-    // Fields: memberId, name, phone, nid, address, photoUrl, branchId, status, createdAt
+    // Fields: memberId, name, phone, nid, address, photoUrl, branchId, status, kycStatus, aiVerificationResult, createdAt
     //
     // Collection: loans
     // Fields: memberId, amount, serviceCharge, totalPayable, installmentType, installments, paidAmount, status, branchId, createdAt

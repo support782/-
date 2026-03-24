@@ -19,13 +19,15 @@
       "type": "object",
       "properties": {
         "uid": { "type": "string" },
-        "email": { "type": "string" },
+        "phone": { "type": "string" },
         "displayName": { "type": "string" },
         "role": { "type": "string", "enum": ["super_admin", "branch_manager", "field_officer", "member"] },
         "branchId": { "type": "string", "description": "ID of the branch they belong to." },
-        "status": { "type": "string", "enum": ["active", "inactive"] }
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "kycStatus": { "type": "string", "enum": ["pending", "verified", "rejected"] },
+        "aiVerificationResult": { "type": "string" }
       },
-      "required": ["uid", "email", "role"]
+      "required": ["uid", "phone", "role"]
     },
     "Member": {
       "title": "Member",
@@ -42,6 +44,8 @@
         "nomineeRelation": { "type": "string" },
         "branchId": { "type": "string" },
         "status": { "type": "string", "enum": ["pending", "active", "rejected"] },
+        "kycStatus": { "type": "string", "enum": ["pending", "verified", "rejected"] },
+        "aiVerificationResult": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "phone", "branchId"]

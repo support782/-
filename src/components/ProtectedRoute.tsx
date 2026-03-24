@@ -2,39 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { UserRole, UserProfile } from '../types';
 import axios from 'axios';
+import { Action, Resource, usePermissions } from '../hooks/usePermissions';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   allowedRoles?: UserRole[];
+  action?: Action;
+  resource?: Resource;
 }
 
-export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<UserProfile | null>(null);
+export default function ProtectedRoute({ children, allowedRoles, action, resource }: ProtectedRouteProps) {
+  const { hasPermission, user, loading } = usePermissions();
   const location = useLocation();
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const response = await axios.get('/api/auth/me');
-        setUser(response.data.user);
-      } catch (err) {
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkAuth();
-
-    // Listen for auth changes
-    const handleAuthChange = (e: any) => {
-      setUser(e.detail);
-      setLoading(false);
-    };
-    window.addEventListener('auth-change', handleAuthChange);
-    return () => window.removeEventListener('auth-change', handleAuthChange);
-  }, []);
 
   if (loading) {
     return (
@@ -49,6 +28,10 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (action && resource && !hasPermission(action, resource)) {
     return <Navigate to="/" replace />;
   }
 

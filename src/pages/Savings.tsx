@@ -29,9 +29,28 @@ export default function Savings() {
     initialDeposit: 0
   });
 
+  const [user, setUser] = useState<any>(null);
+
   useEffect(() => {
     fetchData();
+    fetchUser();
   }, []);
+
+  const fetchUser = async () => {
+    try {
+      const res = await axios.get('/api/auth/me');
+      setUser(res.data.user);
+      if (res.data.user.role === 'member') {
+        const memberRes = await axios.get('/api/members');
+        const myMember = memberRes.data.members.find((m: any) => m.phone === res.data.user.phone);
+        if (myMember) {
+          setFormData(prev => ({ ...prev, memberId: myMember.memberId }));
+        }
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -234,9 +253,10 @@ export default function Savings() {
                   <label className="text-sm font-bold text-slate-700">Select Member</label>
                   <select
                     required
+                    disabled={user?.role === 'member'}
                     value={formData.memberId}
                     onChange={(e) => setFormData({...formData, memberId: e.target.value})}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all disabled:opacity-50"
                   >
                     <option value="">Choose a member</option>
                     {members.map(m => (

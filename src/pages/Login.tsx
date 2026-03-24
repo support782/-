@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogIn, Mail, Lock, AlertCircle, UserPlus } from 'lucide-react';
+import { LogIn, Phone, Lock, AlertCircle, UserPlus } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import PhoneInput from 'react-phone-input-2';
+import 'react-phone-input-2/lib/style.css';
 
 export default function Login() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [displayName, setDisplayName] = useState('');
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -21,8 +23,8 @@ export default function Login() {
     
     const endpoint = isRegistering ? '/api/auth/register' : '/api/auth/login';
     const payload = isRegistering 
-      ? { email, password, displayName } 
-      : { email, password };
+      ? { phone, password, displayName } 
+      : { phone, password };
 
     try {
       const response = await axios.post(endpoint, payload);
@@ -85,18 +87,14 @@ export default function Login() {
           )}
 
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">Email Address</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
-                placeholder="name@example.com"
-              />
-            </div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Phone Number</label>
+            <PhoneInput
+              country={'bd'}
+              value={phone}
+              onChange={setPhone}
+              inputClass="w-full !py-3 !bg-slate-50 !border !border-slate-200 !rounded-xl !focus:ring-2 !focus:ring-indigo-500 !outline-none !transition-all"
+              containerClass="!w-full"
+            />
           </div>
 
           <div>

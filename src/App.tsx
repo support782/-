@@ -12,6 +12,11 @@ import Loans from './pages/Loans';
 import Transactions from './pages/Transactions';
 import Settings from './pages/Settings';
 import Savings from './pages/Savings';
+import LoanRequest from './pages/LoanRequest';
+import GuarantorAccept from './pages/GuarantorAccept';
+import KYC from './pages/KYC';
+import NotificationSettings from './pages/NotificationSettings';
+import Profile from './pages/Profile';
 
 export default function App() {
   return (
@@ -20,6 +25,7 @@ export default function App() {
       <Layout>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/guarantor-accept/:id" element={<GuarantorAccept />} />
           
           <Route path="/" element={
             <ProtectedRoute>
@@ -27,8 +33,14 @@ export default function App() {
             </ProtectedRoute>
           } />
 
+          <Route path="/profile" element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          } />
+
           <Route path="/branches" element={
-            <ProtectedRoute allowedRoles={['super_admin']}>
+            <ProtectedRoute action="read" resource="branches">
               <Branches />
             </ProtectedRoute>
           } />
@@ -40,31 +52,49 @@ export default function App() {
           } />
 
           <Route path="/members" element={
-            <ProtectedRoute allowedRoles={['super_admin', 'branch_manager', 'field_officer']}>
+            <ProtectedRoute action="read" resource="members">
               <Members />
             </ProtectedRoute>
           } />
 
           <Route path="/loans" element={
-            <ProtectedRoute>
+            <ProtectedRoute action="read" resource="loans">
               <Loans />
             </ProtectedRoute>
           } />
 
-          <Route path="/savings" element={
+          <Route path="/loan-request" element={
             <ProtectedRoute>
+              <LoanRequest />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/kyc" element={
+            <ProtectedRoute>
+              <KYC />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/notification-settings" element={
+            <ProtectedRoute>
+              <NotificationSettings />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/savings" element={
+            <ProtectedRoute action="read" resource="savings">
               <Savings />
             </ProtectedRoute>
           } />
 
           <Route path="/transactions" element={
-            <ProtectedRoute>
+            <ProtectedRoute action="read" resource="transactions">
               <Transactions />
             </ProtectedRoute>
           } />
 
           <Route path="/settings" element={
-            <ProtectedRoute allowedRoles={['super_admin']}>
+            <ProtectedRoute action="read" resource="settings">
               <Settings />
             </ProtectedRoute>
           } />

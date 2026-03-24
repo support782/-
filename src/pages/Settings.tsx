@@ -18,7 +18,9 @@ export default function Settings() {
   const [settings, setSettings] = useState<GlobalSettings>({
     smsAppKey: '',
     smsAuthKey: '',
-    paymentMerchantId: '',
+    paymentApiKey: '',
+    paymentSecretKey: '',
+    paymentBrandKey: '',
     lateFeeRate: 10,
     sandboxMode: true,
     autoSmsReminders: false,
@@ -117,15 +119,37 @@ export default function Settings() {
             <h2 className="font-bold text-slate-900">eUddok Payment Gateway</h2>
           </div>
           <div className="p-6 space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700">Merchant ID</label>
-              <input
-                type="text"
-                value={settings.paymentMerchantId}
-                onChange={(e) => setSettings({...settings, paymentMerchantId: e.target.value})}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                placeholder="Enter your merchant ID"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">API Key</label>
+                <input
+                  type="text"
+                  value={settings.paymentApiKey}
+                  onChange={(e) => setSettings({...settings, paymentApiKey: e.target.value})}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  placeholder="Enter API Key"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">Secret Key</label>
+                <input
+                  type="password"
+                  value={settings.paymentSecretKey}
+                  onChange={(e) => setSettings({...settings, paymentSecretKey: e.target.value})}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  placeholder="Enter Secret Key"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">Brand Key</label>
+                <input
+                  type="text"
+                  value={settings.paymentBrandKey}
+                  onChange={(e) => setSettings({...settings, paymentBrandKey: e.target.value})}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  placeholder="Enter Brand Key"
+                />
+              </div>
             </div>
           </div>
         </motion.div>
