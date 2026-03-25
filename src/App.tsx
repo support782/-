@@ -15,7 +15,10 @@ import Savings from './pages/Savings';
 import LoanRequest from './pages/LoanRequest';
 import GuarantorAccept from './pages/GuarantorAccept';
 import KYC from './pages/KYC';
+import Verifications from './pages/Verifications';
 import NotificationSettings from './pages/NotificationSettings';
+import AdminNotifications from './pages/AdminNotifications';
+import Withdrawal from './pages/Withdrawal';
 import Profile from './pages/Profile';
 
 export default function App() {
@@ -36,6 +39,12 @@ export default function App() {
           <Route path="/profile" element={
             <ProtectedRoute>
               <Profile />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/withdrawals" element={
+            <ProtectedRoute action="read" resource="withdrawals">
+              <Withdrawal />
             </ProtectedRoute>
           } />
 
@@ -75,9 +84,21 @@ export default function App() {
             </ProtectedRoute>
           } />
 
+          <Route path="/verifications" element={
+            <ProtectedRoute allowedRoles={['super_admin', 'branch_manager']}>
+              <Verifications />
+            </ProtectedRoute>
+          } />
+
           <Route path="/notification-settings" element={
             <ProtectedRoute>
               <NotificationSettings />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/admin-notifications" element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
+              <AdminNotifications />
             </ProtectedRoute>
           } />
 

@@ -86,4 +86,11 @@ export interface GlobalSettings {
   sandboxMode: boolean;
   autoSmsReminders: boolean;
   reminderDays: number;
+  otpEnabled?: boolean;
+  aiVerificationEnabled?: boolean;
+  aiModel?: string;
+  aiApiKey?: string;
+  welcomeSmsEnabled?: boolean;
+  welcomeSmsText?: string;
+  otpResendTimer?: number;
 }

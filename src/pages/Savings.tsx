@@ -71,7 +71,7 @@ export default function Savings() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.memberId) {
+    if (user?.role !== 'member' && !formData.memberId) {
       toast.error('Please select a member');
       return;
     }
@@ -79,10 +79,26 @@ export default function Savings() {
     setLoading(true);
     try {
       const member = members.find(m => m.memberId === formData.memberId);
-      await axios.post('/api/savings', {
+      const response = await axios.post('/api/savings', {
         ...formData,
         branchId: member?.branchId || 'DHK-01'
       });
+
+      if (formData.initialDeposit > 0) {
+        // Initiate online payment if initial deposit is provided
+        const payRes = await axios.post('/api/pay/create', {
+          amount: formData.initialDeposit,
+          memberId: formData.memberId,
+          savingsAccountId: response.data.id,
+          branchId: member?.branchId || 'DHK-01',
+          type: 'savings_deposit'
+        });
+
+        if (payRes.data.payment_url) {
+          window.location.href = payRes.data.payment_url;
+          return;
+        }
+      }
 
       toast.success('Savings account opened successfully');
       setIsModalOpen(false);
@@ -200,9 +216,34 @@ export default function Savings() {
                       <span className="text-sm font-bold text-indigo-600">৳{account.balance.toLocaleString()}</span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-                        <CheckCircle size={12} className="mr-1" /> Active
-                      </span>
+                      {account.status === 'active' ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                          <CheckCircle size={12} className="mr-1" /> Active
+                        </span>
+                      ) : (
+                        <div className="flex items-center space-x-2">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                            <Clock size={12} className="mr-1" /> Pending
+                          </span>
+                          <button
+                            onClick={async () => {
+                              // Re-initiate payment
+                              const payRes = await axios.post('/api/pay/create', {
+                                amount: account.balance,
+                                memberId: account.memberId,
+                                savingsAccountId: account.id,
+                                type: 'savings_deposit'
+                              });
+                              if (payRes.data.payment_url) {
+                                window.location.href = payRes.data.payment_url;
+                              }
+                            }}
+                            className="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700"
+                          >
+                            Pay Now
+                          </button>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
                       {format(new Date(account.createdAt), 'MMM dd, yyyy')}
@@ -249,21 +290,22 @@ export default function Savings() {
                 </button>
               </div>
               <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">Select Member</label>
-                  <select
-                    required
-                    disabled={user?.role === 'member'}
-                    value={formData.memberId}
-                    onChange={(e) => setFormData({...formData, memberId: e.target.value})}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all disabled:opacity-50"
-                  >
-                    <option value="">Choose a member</option>
-                    {members.map(m => (
-                      <option key={m.id} value={m.memberId}>{m.name} ({m.memberId})</option>
-                    ))}
-                  </select>
-                </div>
+                {user?.role !== 'member' && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-700">Select Member</label>
+                    <select
+                      required
+                      value={formData.memberId}
+                      onChange={(e) => setFormData({...formData, memberId: e.target.value})}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    >
+                      <option value="">Choose a member</option>
+                      {members.map(m => (
+                        <option key={m.id} value={m.memberId}>{m.name} ({m.memberId})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">

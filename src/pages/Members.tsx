@@ -51,6 +51,41 @@ export default function Members() {
     savings: any[],
     transactions: Transaction[]
   } | null>(null);
+  const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
+  const [loanFormData, setLoanFormData] = useState({
+    amount: 0,
+    installmentType: 'weekly' as 'daily' | 'weekly' | 'monthly',
+    installments: 46,
+    guarantorMobile: ''
+  });
+
+  const handleApplyLoan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMember) return;
+    
+    setLoading(true);
+    try {
+      const totalPayable = loanFormData.amount + (loanFormData.amount * 0.1); // Assuming 10% charge
+      await axios.post('/api/loans', {
+        memberId: selectedMember.memberId,
+        amount: loanFormData.amount,
+        serviceCharge: 10,
+        totalPayable,
+        installmentType: loanFormData.installmentType,
+        installments: loanFormData.installments,
+        applicationDate: new Date().toISOString().split('T')[0],
+        guarantorMobile: loanFormData.guarantorMobile,
+        branchId: selectedMember.branchId || 'DHK-01'
+      });
+      toast.success('Loan application submitted');
+      setIsLoanModalOpen(false);
+      setLoanFormData({ amount: 0, installmentType: 'weekly', installments: 46, guarantorMobile: '' });
+    } catch (error) {
+      toast.error('Failed to submit loan request');
+    } finally {
+      setLoading(false);
+    }
+  };
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -217,6 +252,15 @@ export default function Members() {
             <Plus size={20} />
             <span>Register Member</span>
           </button>
+        )}
+        {hasPermission('create', 'loans') && (
+          <Link
+            to="/loan-request"
+            className="inline-flex items-center justify-center space-x-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
+          >
+            <HandCoins size={20} />
+            <span>Request Loan</span>
+          </Link>
         )}
       </div>
 
@@ -388,9 +432,84 @@ export default function Members() {
         </div>
       </div>
 
-      {/* Details Modal */}
+      {/* Loan Application Modal */}
       <AnimatePresence>
-        {isDetailsModalOpen && selectedMember && (
+        {isLoanModalOpen && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsLoanModalOpen(false)}
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-600 text-white">
+                <h2 className="text-xl font-bold">Apply for Loan</h2>
+                <button onClick={() => setIsLoanModalOpen(false)} className="p-2 hover:bg-white/10 rounded-lg transition-all">
+                  <X size={24} />
+                </button>
+              </div>
+              <form onSubmit={handleApplyLoan} className="p-6 space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">Amount</label>
+                  <input
+                    type="number"
+                    required
+                    value={loanFormData.amount}
+                    onChange={(e) => setLoanFormData({...loanFormData, amount: Number(e.target.value)})}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">Installment Type</label>
+                  <select
+                    value={loanFormData.installmentType}
+                    onChange={(e) => setLoanFormData({...loanFormData, installmentType: e.target.value as any})}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">Installments</label>
+                  <input
+                    type="number"
+                    required
+                    value={loanFormData.installments}
+                    onChange={(e) => setLoanFormData({...loanFormData, installments: Number(e.target.value)})}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">Guarantor Mobile</label>
+                  <input
+                    type="text"
+                    required
+                    value={loanFormData.guarantorMobile}
+                    onChange={(e) => setLoanFormData({...loanFormData, guarantorMobile: e.target.value})}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
+                >
+                  Submit Application
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
@@ -454,8 +573,30 @@ export default function Members() {
                     </div>
                     {selectedMember.aiVerificationResult && (
                       <div className="mt-4 p-3 bg-white/10 rounded-lg text-xs text-white/90">
-                        <p className="font-bold mb-1">AI Verification Result:</p>
-                        <p>{selectedMember.aiVerificationResult}</p>
+                        <p className="font-bold mb-2">AI Verification Result:</p>
+                        {(() => {
+                          try {
+                            const aiData = JSON.parse(selectedMember.aiVerificationResult);
+                            return (
+                              <div className="space-y-2">
+                                <div className="flex justify-between">
+                                  <span className="opacity-75">Status:</span>
+                                  <span className="font-bold capitalize">{aiData.status}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="opacity-75">Confidence:</span>
+                                  <span className="font-bold">{Math.round(aiData.confidence * 100)}%</span>
+                                </div>
+                                <div>
+                                  <span className="opacity-75 block mb-1">Reason:</span>
+                                  <span className="block bg-black/20 p-2 rounded">{aiData.reason}</span>
+                                </div>
+                              </div>
+                            );
+                          } catch (e) {
+                            return <p>{selectedMember.aiVerificationResult}</p>;
+                          }
+                        })()}
                       </div>
                     )}
                   </div>
@@ -521,6 +662,13 @@ export default function Members() {
                         <HandCoins size={18} className="text-indigo-600" />
                         <span>Active Loans</span>
                       </h3>
+                      <button
+                        onClick={() => setIsLoanModalOpen(true)}
+                        className="inline-flex items-center space-x-2 bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-indigo-700 transition-all"
+                      >
+                        <Plus size={16} />
+                        <span>Apply for Loan</span>
+                      </button>
                       <div className="bg-slate-50 rounded-xl overflow-hidden border border-slate-200">
                         <table className="w-full text-left text-sm">
                           <thead className="bg-slate-100">

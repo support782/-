@@ -16,7 +16,8 @@ async function startServer() {
     const app = express();
     const PORT = 3000;
 
-    app.use(express.json());
+    app.use(express.json({ limit: '50mb' }));
+    app.use(express.urlencoded({ limit: '50mb', extended: true }));
     app.use(cookieParser());
 
     app.get("/api/health", (req, res) => {
@@ -40,6 +41,8 @@ async function startServer() {
       photoUrl TEXT,
       role TEXT DEFAULT 'member',
       status TEXT DEFAULT 'active',
+      paymentMethods TEXT DEFAULT '[]',
+      notificationSettings TEXT DEFAULT '{"email": true, "sms": true}',
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -103,6 +106,17 @@ async function startServer() {
       balance REAL DEFAULT 0,
       status TEXT DEFAULT 'active',
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS withdrawals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER,
+      amount REAL,
+      method TEXT,
+      accountNumber TEXT,
+      status TEXT DEFAULT 'pending',
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (userId) REFERENCES users(id)
     );
 
     CREATE TABLE IF NOT EXISTS loan_requests (
@@ -209,10 +223,48 @@ async function startServer() {
     });
   };
 
+  // OTP Store
+  const otpStore = new Map<string, { otp: string, data: any, expiresAt: number }>();
+
   // Auth Routes
   app.post("/api/auth/register", async (req, res) => {
     const { phone, password, displayName } = req.body;
     try {
+      const settings = await db.get("SELECT data FROM settings WHERE id = 'global'");
+      const globalSettings = JSON.parse(settings?.data || '{}');
+
+      if (globalSettings.otpEnabled) {
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        otpStore.set(phone, {
+          otp,
+          data: { phone, password, displayName },
+          expiresAt: Date.now() + 5 * 60 * 1000 // 5 minutes
+        });
+        console.log(`[OTP] Registration OTP for ${phone}: ${otp}`);
+        
+        // Try to send SMS if configured
+        if (globalSettings.smsAppKey && globalSettings.smsAuthKey && !globalSettings.sandboxMode) {
+          try {
+            const formattedPhone = phone.replace(/\D/g, '');
+            const formData = new URLSearchParams();
+            formData.append('appkey', globalSettings.smsAppKey);
+            formData.append('authkey', globalSettings.smsAuthKey);
+            formData.append('to', formattedPhone);
+            formData.append('message', `Your eUddok registration OTP is ${otp}`);
+            formData.append('sandbox', 'false');
+
+            await axios.post('https://sms.euddok.com/api/create-message', formData, {
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+          } catch (e) {
+            console.error('Failed to send OTP SMS', e);
+          }
+        }
+
+        return res.json({ requiresOtp: true, message: "OTP sent to your phone" });
+      }
+
+      // Proceed with normal registration if OTP disabled
       const hashedPassword = await bcrypt.hash(password, 10);
       
       // Check if this is the first user
@@ -224,10 +276,100 @@ async function startServer() {
         [phone, hashedPassword, displayName, role]
       );
       
-      const user = { id: result.lastID, phone, displayName, role };
+      const userId = result.lastID;
+      const memberId = `MEM-${Math.floor(10000 + Math.random() * 90000)}`;
+      await db.run(
+        "INSERT INTO members (memberId, name, phone) VALUES (?, ?, ?)",
+        [memberId, displayName, phone]
+      );
+      
+      const user = { id: userId, phone, displayName, role };
       const token = jwt.sign(user, JWT_SECRET, { expiresIn: "7d" });
       
       res.cookie("token", token, { httpOnly: true, secure: true, sameSite: "none" });
+
+      // Send Welcome SMS if enabled
+      if (globalSettings.welcomeSmsEnabled && globalSettings.welcomeSmsText && !globalSettings.sandboxMode) {
+        try {
+          const formattedPhone = phone.replace(/\D/g, '');
+          const formData = new URLSearchParams();
+          formData.append('appkey', globalSettings.smsAppKey);
+          formData.append('authkey', globalSettings.smsAuthKey);
+          formData.append('to', formattedPhone);
+          formData.append('message', globalSettings.welcomeSmsText);
+          formData.append('sandbox', 'false');
+
+          await axios.post('https://sms.euddok.com/api/create-message', formData, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          });
+        } catch (e) {
+          console.error('Failed to send Welcome SMS', e);
+        }
+      }
+
+      res.json({ user });
+    } catch (error: any) {
+      if (error.message.includes("UNIQUE constraint failed")) {
+        return res.status(400).json({ error: "Phone number already exists" });
+      }
+      res.status(500).json({ error: "Registration failed" });
+    }
+  });
+
+  app.post("/api/auth/verify-register", async (req, res) => {
+    const { phone, otp } = req.body;
+    const stored = otpStore.get(phone);
+
+    if (!stored || stored.otp !== otp || stored.expiresAt < Date.now()) {
+      return res.status(400).json({ error: "Invalid or expired OTP" });
+    }
+
+    try {
+      const { password, displayName } = stored.data;
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
+      const userCount = await db.get("SELECT COUNT(*) as count FROM users");
+      const role = (userCount.count === 0 || phone === "01700000000") ? "super_admin" : "member";
+
+      const result = await db.run(
+        "INSERT INTO users (phone, password, displayName, role) VALUES (?, ?, ?, ?)",
+        [phone, hashedPassword, displayName, role]
+      );
+      
+      const userId = result.lastID;
+      const memberId = `MEM-${Math.floor(10000 + Math.random() * 90000)}`;
+      await db.run(
+        "INSERT INTO members (memberId, name, phone) VALUES (?, ?, ?)",
+        [memberId, displayName, phone]
+      );
+      
+      const user = { id: userId, phone, displayName, role };
+      const token = jwt.sign(user, JWT_SECRET, { expiresIn: "7d" });
+      
+      otpStore.delete(phone);
+      res.cookie("token", token, { httpOnly: true, secure: true, sameSite: "none" });
+
+      // Send Welcome SMS if enabled
+      const settings = await db.get("SELECT data FROM settings WHERE id = 'global'");
+      const globalSettings = JSON.parse(settings?.data || '{}');
+      if (globalSettings.welcomeSmsEnabled && globalSettings.welcomeSmsText && !globalSettings.sandboxMode) {
+        try {
+          const formattedPhone = phone.replace(/\D/g, '');
+          const formData = new URLSearchParams();
+          formData.append('appkey', globalSettings.smsAppKey);
+          formData.append('authkey', globalSettings.smsAuthKey);
+          formData.append('to', formattedPhone);
+          formData.append('message', globalSettings.welcomeSmsText);
+          formData.append('sandbox', 'false');
+
+          await axios.post('https://sms.euddok.com/api/create-message', formData, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          });
+        } catch (e) {
+          console.error('Failed to send Welcome SMS', e);
+        }
+      }
+
       res.json({ user });
     } catch (error: any) {
       if (error.message.includes("UNIQUE constraint failed")) {
@@ -246,9 +388,107 @@ async function startServer() {
       const validPassword = await bcrypt.compare(password, user.password);
       if (!validPassword) return res.status(400).json({ error: "Invalid password" });
 
+      const settings = await db.get("SELECT data FROM settings WHERE id = 'global'");
+      const globalSettings = JSON.parse(settings?.data || '{}');
+
+      if (globalSettings.otpEnabled) {
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        otpStore.set(phone, {
+          otp,
+          data: { user },
+          expiresAt: Date.now() + 5 * 60 * 1000
+        });
+        console.log(`[OTP] Login OTP for ${phone}: ${otp}`);
+
+        if (globalSettings.smsAppKey && globalSettings.smsAuthKey && !globalSettings.sandboxMode) {
+          try {
+            const formattedPhone = phone.replace(/\D/g, '');
+            const formData = new URLSearchParams();
+            formData.append('appkey', globalSettings.smsAppKey);
+            formData.append('authkey', globalSettings.smsAuthKey);
+            formData.append('to', formattedPhone);
+            formData.append('message', `Your eUddok login OTP is ${otp}`);
+            formData.append('sandbox', 'false');
+
+            await axios.post('https://sms.euddok.com/api/create-message', formData, {
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+          } catch (e) {
+            console.error('Failed to send OTP SMS', e);
+          }
+        }
+
+        return res.json({ requiresOtp: true, message: "OTP sent to your phone" });
+      }
+
       const { password: _, ...userWithoutPassword } = user;
       const token = jwt.sign(userWithoutPassword, JWT_SECRET, { expiresIn: "7d" });
 
+      res.cookie("token", token, { httpOnly: true, secure: true, sameSite: "none" });
+      res.json({ user: userWithoutPassword });
+    } catch (error) {
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  app.post("/api/auth/resend-otp", async (req, res) => {
+    const { phone } = req.body;
+    const stored = otpStore.get(phone);
+
+    if (!stored) {
+      return res.status(400).json({ error: "No pending OTP request found" });
+    }
+
+    try {
+      const settings = await db.get("SELECT data FROM settings WHERE id = 'global'");
+      const globalSettings = JSON.parse(settings?.data || '{}');
+
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      otpStore.set(phone, {
+        ...stored,
+        otp,
+        expiresAt: Date.now() + 5 * 60 * 1000
+      });
+      console.log(`[OTP] Resent OTP for ${phone}: ${otp}`);
+
+      if (globalSettings.smsAppKey && globalSettings.smsAuthKey && !globalSettings.sandboxMode) {
+        try {
+          const formattedPhone = phone.replace(/\D/g, '');
+          const formData = new URLSearchParams();
+          formData.append('appkey', globalSettings.smsAppKey);
+          formData.append('authkey', globalSettings.smsAuthKey);
+          formData.append('to', formattedPhone);
+          formData.append('message', `Your eUddok OTP is ${otp}`);
+          formData.append('sandbox', 'false');
+
+          await axios.post('https://sms.euddok.com/api/create-message', formData, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          });
+        } catch (e) {
+          console.error('Failed to send OTP SMS', e);
+        }
+      }
+
+      res.json({ message: "OTP resent successfully" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to resend OTP" });
+    }
+  });
+
+  app.post("/api/auth/verify-login", async (req, res) => {
+    const { phone, otp } = req.body;
+    const stored = otpStore.get(phone);
+
+    if (!stored || stored.otp !== otp || stored.expiresAt < Date.now()) {
+      return res.status(400).json({ error: "Invalid or expired OTP" });
+    }
+
+    try {
+      const { user } = stored.data;
+      const { password: _, ...userWithoutPassword } = user;
+      const token = jwt.sign(userWithoutPassword, JWT_SECRET, { expiresIn: "7d" });
+
+      otpStore.delete(phone);
       res.cookie("token", token, { httpOnly: true, secure: true, sameSite: "none" });
       res.json({ user: userWithoutPassword });
     } catch (error) {
@@ -268,11 +508,11 @@ async function startServer() {
   });
 
   app.put("/api/auth/profile", authenticateToken, async (req: any, res) => {
-    const { displayName, photoUrl } = req.body;
+    const { displayName, photoUrl, paymentMethods, notificationSettings } = req.body;
     try {
       await db.run(
-        "UPDATE users SET displayName = ?, photoUrl = ? WHERE id = ?",
-        [displayName, photoUrl, req.user.id]
+        "UPDATE users SET displayName = ?, photoUrl = ?, paymentMethods = ?, notificationSettings = ? WHERE id = ?",
+        [displayName, photoUrl, JSON.stringify(paymentMethods), JSON.stringify(notificationSettings), req.user.id]
       );
       const user = await db.get("SELECT * FROM users WHERE id = ?", [req.user.id]);
       const { password: _, ...userWithoutPassword } = user;
@@ -430,9 +670,14 @@ async function startServer() {
   });
 
   // Loan Routes
-  app.get("/api/loans", authenticateToken, async (req, res) => {
+  app.get("/api/loans", authenticateToken, async (req: any, res) => {
     try {
-      const loans = await db.all("SELECT * FROM loans ORDER BY createdAt DESC");
+      const loans = await db.all(
+        req.user.role === 'member'
+          ? "SELECT l.* FROM loans l JOIN members m ON l.memberId = m.memberId JOIN users u ON m.phone = u.phone WHERE u.id = ? ORDER BY l.createdAt DESC"
+          : "SELECT * FROM loans ORDER BY createdAt DESC",
+        req.user.role === 'member' ? [req.user.id] : []
+      );
       res.json({ loans });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch loans" });
@@ -575,6 +820,41 @@ async function startServer() {
   });
 
   // KYC Routes
+  app.get("/api/kyc/all", authenticateToken, async (req: any, res: any) => {
+    if (req.user.role === 'member') return res.status(403).json({ error: "Forbidden" });
+    try {
+      const records = await db.all(`
+        SELECT k.*, u.displayName, u.phone, m.memberId
+        FROM kyc_data k
+        JOIN users u ON k.userId = u.id
+        LEFT JOIN members m ON u.phone = m.phone
+        ORDER BY k.createdAt DESC
+      `);
+      res.json({ records });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch KYC records" });
+    }
+  });
+
+  app.put("/api/kyc/:id/status", authenticateToken, async (req: any, res: any) => {
+    if (req.user.role === 'member') return res.status(403).json({ error: "Forbidden" });
+    const { status } = req.body;
+    try {
+      await db.run("UPDATE kyc_data SET status = ? WHERE id = ?", [status, req.params.id]);
+      
+      const kycRecord = await db.get("SELECT userId FROM kyc_data WHERE id = ?", [req.params.id]);
+      if (kycRecord) {
+        const user = await db.get("SELECT phone FROM users WHERE id = ?", [kycRecord.userId]);
+        if (user) {
+          await db.run("UPDATE members SET kycStatus = ? WHERE phone = ?", [status, user.phone]);
+        }
+      }
+      res.json({ message: "Status updated successfully" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update status" });
+    }
+  });
+
   app.get("/api/kyc/status", authenticateToken, async (req: any, res: any) => {
     const userId = req.user.id;
     try {
@@ -582,6 +862,127 @@ async function startServer() {
       res.json({ kyc });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch KYC status" });
+    }
+  });
+
+  app.get("/api/withdrawals", authenticateToken, async (req: any, res: any) => {
+    const userId = req.user.id;
+    try {
+      const withdrawals = await db.all(
+        req.user.role === 'member' 
+          ? "SELECT * FROM withdrawals WHERE userId = ? ORDER BY createdAt DESC"
+          : "SELECT w.*, u.displayName FROM withdrawals w JOIN users u ON w.userId = u.id ORDER BY w.createdAt DESC",
+        req.user.role === 'member' ? [userId] : []
+      );
+      res.json({ withdrawals });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch withdrawals" });
+    }
+  });
+
+  app.post("/api/withdrawals", authenticateToken, async (req: any, res: any) => {
+    const { amount, method, accountNumber } = req.body;
+    const userId = req.user.id;
+    try {
+      await db.run(
+        "INSERT INTO withdrawals (userId, amount, method, accountNumber) VALUES (?, ?, ?, ?)",
+        [userId, amount, method, accountNumber]
+      );
+      res.json({ message: "Withdrawal request submitted" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to submit withdrawal" });
+    }
+  });
+
+  app.post("/api/kyc/verify-ai", authenticateToken, async (req: any, res: any) => {
+    const { nidFront, nidBack, selfie } = req.body;
+    try {
+      const sanitizeBase64 = (str: string) => {
+        if (!str) return str;
+        // Ensure it starts with data:image/jpeg;base64, and remove any whitespace
+        const cleanStr = str.replace(/\s/g, '');
+        if (cleanStr.startsWith('data:image/')) {
+          return cleanStr;
+        }
+        return `data:image/jpeg;base64,${cleanStr}`;
+      };
+
+      const cleanNidFront = sanitizeBase64(nidFront);
+      const cleanNidBack = sanitizeBase64(nidBack);
+      const cleanSelfie = sanitizeBase64(selfie);
+
+      const settings = await db.get("SELECT data FROM settings WHERE id = 'global'");
+      const globalSettings = JSON.parse(settings?.data || '{}');
+
+      if (!globalSettings.aiVerificationEnabled) {
+        return res.status(400).json({ error: "AI Verification is disabled" });
+      }
+
+      const apiKey = globalSettings.aiApiKey;
+      const model = globalSettings.aiModel || "google/gemini-2.5-flash";
+
+      if (!apiKey) {
+        return res.status(400).json({ error: "AI API Key is not configured" });
+      }
+
+      const prompt = `
+        You are an expert KYC verification system called "Einstein Verify".
+        Analyze the following three images:
+        1. NID Front
+        2. NID Back
+        3. Selfie of the person
+        
+        Tasks:
+        - Verify if the NID is a valid Bangladesh National ID card.
+        - Compare the face in the NID Front with the face in the Selfie.
+        - Check if the name and details on the NID are clearly visible.
+        
+        Return a JSON response with:
+        {
+          "status": "verified" | "rejected",
+          "confidence": number (0-100),
+          "reason": "Clear explanation of the result",
+          "extractedInfo": {
+            "name": "Name from NID",
+            "nidNumber": "NID Number"
+          }
+        }
+      `;
+
+      // Call OpenRouter API
+      const response = await axios.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          model: model,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: prompt },
+                { type: "image_url", image_url: { url: cleanNidFront } },
+                { type: "image_url", image_url: { url: cleanNidBack } },
+                { type: "image_url", image_url: { url: cleanSelfie } }
+              ]
+            }
+          ],
+          response_format: { type: "json_object" }
+        },
+        {
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "HTTP-Referer": "https://euddok.com",
+            "X-Title": "eUddok KYC"
+          }
+        }
+      );
+
+      const resultText = response.data.choices[0].message.content;
+      const result = JSON.parse(resultText);
+
+      res.json({ result });
+    } catch (error: any) {
+      console.error("AI Verification Error:", error.response?.data || error.message);
+      res.status(500).json({ error: "AI Verification failed" });
     }
   });
 
@@ -640,9 +1041,14 @@ async function startServer() {
   });
 
   // Savings Routes
-  app.get("/api/savings", authenticateToken, async (req, res) => {
+  app.get("/api/savings", authenticateToken, async (req: any, res) => {
     try {
-      const accounts = await db.all("SELECT * FROM savings_accounts ORDER BY createdAt DESC");
+      const accounts = await db.all(
+        req.user.role === 'member'
+          ? "SELECT s.* FROM savings_accounts s JOIN members m ON s.memberId = m.memberId JOIN users u ON m.phone = u.phone WHERE u.id = ? ORDER BY s.createdAt DESC"
+          : "SELECT * FROM savings_accounts ORDER BY createdAt DESC",
+        req.user.role === 'member' ? [req.user.id] : []
+      );
       res.json({ accounts });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch savings accounts" });
@@ -650,40 +1056,52 @@ async function startServer() {
   });
 
   app.post("/api/savings", authenticateToken, async (req: any, res: any) => {
-    const { memberId, type, initialDeposit, branchId } = req.body;
+    let { memberId, type, initialDeposit, branchId } = req.body;
     const { id: userId, role, phone } = req.user;
+    console.log("Savings POST request:", { memberId, type, initialDeposit, branchId, userId, role, phone });
 
     try {
-      // If member, they can only open for themselves
+      // If member, they can only open for themselves and we auto-assign their memberId
       if (role === 'member') {
-        const member = await db.get("SELECT memberId FROM members WHERE phone = ?", [phone]);
-        if (!member || member.memberId !== memberId) {
-          return res.status(403).json({ error: "Members can only open accounts for themselves" });
+        const member = await db.get("SELECT memberId, branchId FROM members WHERE phone = ?", [phone]);
+        console.log("Member lookup result:", member);
+        if (!member) {
+          return res.status(403).json({ error: "Member profile not found" });
         }
+        memberId = member.memberId;
+        branchId = member.branchId;
       }
 
+      const status = initialDeposit > 0 ? 'pending' : 'active';
       const result = await db.run(
-        "INSERT INTO savings_accounts (memberId, type, balance) VALUES (?, ?, ?)",
-        [memberId, type, initialDeposit || 0]
+        "INSERT INTO savings_accounts (memberId, type, balance, status) VALUES (?, ?, ?, ?)",
+        [memberId, type, initialDeposit || 0, status]
       );
+      console.log("Savings insert result:", result);
       
-      if (initialDeposit > 0) {
+      if (initialDeposit && initialDeposit > 0) {
         await db.run(
           "INSERT INTO transactions (memberId, type, amount, method, savingsAccountId, branchId, fieldOfficerId) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          [memberId, 'deposit', initialDeposit, 'cash', result.lastID, branchId, (req as any).user.id]
+          [memberId, 'deposit', initialDeposit, 'cash', result.lastID, branchId, userId]
         );
       }
       
       res.json({ id: result.lastID, memberId, type, balance: initialDeposit || 0 });
     } catch (error) {
+      console.error("Savings account creation error:", error);
       res.status(500).json({ error: "Failed to create savings account" });
     }
   });
 
   // Transaction Routes
-  app.get("/api/transactions", authenticateToken, async (req, res) => {
+  app.get("/api/transactions", authenticateToken, async (req: any, res) => {
     try {
-      const transactions = await db.all("SELECT * FROM transactions ORDER BY timestamp DESC LIMIT 100");
+      const transactions = await db.all(
+        req.user.role === 'member'
+          ? "SELECT t.* FROM transactions t JOIN members m ON t.memberId = m.memberId JOIN users u ON m.phone = u.phone WHERE u.id = ? ORDER BY t.timestamp DESC"
+          : "SELECT * FROM transactions ORDER BY timestamp DESC LIMIT 100",
+        req.user.role === 'member' ? [req.user.id] : []
+      );
       res.json({ transactions });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch transactions" });
@@ -743,7 +1161,7 @@ async function startServer() {
   // Payment Routes
   app.post("/api/pay/create", authenticateToken, async (req, res) => {
     try {
-      const { amount, memberId, loanId, branchId, type } = req.body;
+      const { amount, memberId, loanId, branchId, type, savingsAccountId } = req.body;
       const settingsRow = await db.get("SELECT data FROM settings WHERE id = 'global'");
       const settings = settingsRow ? JSON.parse(settingsRow.data) : {};
 
@@ -771,6 +1189,7 @@ async function startServer() {
           loanId,
           branchId,
           type,
+          savingsAccountId,
           fieldOfficerId: (req as any).user.id
         }
       };
@@ -835,8 +1254,21 @@ async function startServer() {
           if (loan && loan.paidAmount >= loan.totalPayable) {
             await db.run("UPDATE loans SET status = 'completed' WHERE id = ?", [loanId]);
           }
+          res.redirect('/loans?payment=success');
+        } else if (type === 'savings_deposit' && metadata.savingsAccountId) {
+          // Record transaction
+          await db.run(
+            "INSERT INTO transactions (memberId, type, amount, method, savingsAccountId, branchId, fieldOfficerId) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [memberId, 'deposit', parseFloat(data.amount), 'online', null, branchId, fieldOfficerId]
+          );
+
+          // Update savings balance
+          await db.run("UPDATE savings_accounts SET balance = balance + ?, status = 'active' WHERE id = ?", [parseFloat(data.amount), metadata.savingsAccountId]);
+          
+          res.redirect('/savings?payment=success');
+        } else {
+          res.redirect('/dashboard?payment=success');
         }
-        res.redirect('/loans?payment=success');
       } else {
         res.redirect('/loans?payment=failed');
       }

@@ -24,7 +24,13 @@ export default function Settings() {
     lateFeeRate: 10,
     sandboxMode: true,
     autoSmsReminders: false,
-    reminderDays: 3
+    reminderDays: 3,
+    otpEnabled: false,
+    aiVerificationEnabled: false,
+    aiModel: 'google/gemini-2.5-flash',
+    aiApiKey: '',
+    welcomeSmsEnabled: false,
+    welcomeSmsText: 'Welcome to our Samity! Your account has been created successfully.'
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -168,24 +174,24 @@ export default function Settings() {
           <div className="p-6 space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-bold text-slate-900">Automated SMS Reminders</p>
-                <p className="text-sm text-slate-500">Send reminders for upcoming loan installments.</p>
+                <p className="font-bold text-slate-900">OTP System</p>
+                <p className="text-sm text-slate-500">Enable OTP for login and registration.</p>
               </div>
               <button
-                onClick={() => setSettings({...settings, autoSmsReminders: !settings.autoSmsReminders})}
-                className={`p-2 rounded-full transition-all ${settings.autoSmsReminders ? 'text-indigo-600' : 'text-slate-300'}`}
+                onClick={() => setSettings({...settings, otpEnabled: !settings.otpEnabled})}
+                className={`p-2 rounded-full transition-all ${settings.otpEnabled ? 'text-indigo-600' : 'text-slate-300'}`}
               >
-                {settings.autoSmsReminders ? <ToggleRight size={40} /> : <ToggleLeft size={40} />}
+                {settings.otpEnabled ? <ToggleRight size={40} /> : <ToggleLeft size={40} />}
               </button>
             </div>
 
-            {settings.autoSmsReminders && (
+            {settings.otpEnabled && (
               <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">Reminder Days (Before Due Date)</label>
+                <label className="text-sm font-bold text-slate-700">OTP Resend Timer (Seconds)</label>
                 <input
                   type="number"
-                  value={settings.reminderDays}
-                  onChange={(e) => setSettings({...settings, reminderDays: Number(e.target.value)})}
+                  value={settings.otpResendTimer || 60}
+                  onChange={(e) => setSettings({...settings, otpResendTimer: Number(e.target.value)})}
                   className="w-full max-w-xs px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                 />
               </div>
@@ -213,6 +219,58 @@ export default function Settings() {
                 className="w-full max-w-xs px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
               />
             </div>
+          </div>
+        </motion.div>
+
+        {/* AI Verification */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
+        >
+          <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center space-x-3">
+            <ShieldCheck className="text-indigo-600" size={20} />
+            <h2 className="font-bold text-slate-900">Instant AI Verification</h2>
+          </div>
+          <div className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-bold text-slate-900">Enable AI Verification</p>
+                <p className="text-sm text-slate-500">Automatically verify member KYC using AI.</p>
+              </div>
+              <button
+                onClick={() => setSettings({...settings, aiVerificationEnabled: !settings.aiVerificationEnabled})}
+                className={`p-2 rounded-full transition-all ${settings.aiVerificationEnabled ? 'text-indigo-600' : 'text-slate-300'}`}
+              >
+                {settings.aiVerificationEnabled ? <ToggleRight size={40} /> : <ToggleLeft size={40} />}
+              </button>
+            </div>
+
+            {settings.aiVerificationEnabled && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">OpenRouter AI Model</label>
+                  <input
+                    type="text"
+                    value={settings.aiModel}
+                    onChange={(e) => setSettings({...settings, aiModel: e.target.value})}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    placeholder="e.g., google/gemini-2.5-flash"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">OpenRouter API Key</label>
+                  <input
+                    type="password"
+                    value={settings.aiApiKey}
+                    onChange={(e) => setSettings({...settings, aiApiKey: e.target.value})}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    placeholder="sk-or-v1-..."
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </motion.div>
 

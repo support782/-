@@ -102,7 +102,14 @@ export default function Dashboard() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard Overview</h1>
+        <h1 className="text-2xl font-bold text-slate-900 flex items-center">
+          Dashboard Overview
+          {user?.kycStatus === 'verified' && (
+            <span className="inline-flex items-center ml-3 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+              <CheckCircle2 size={12} className="mr-1" /> Verified
+            </span>
+          )}
+        </h1>
         <p className="text-slate-500">Welcome back, {user?.displayName}</p>
       </div>
 

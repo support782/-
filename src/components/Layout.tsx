@@ -15,7 +15,8 @@ import {
   X,
   UserCircle,
   ShieldCheck,
-  Bell
+  Bell,
+  Wallet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -73,9 +74,12 @@ export default function Layout({ children }: LayoutProps) {
     { name: 'Members', path: '/members', icon: Users, roles: ['super_admin', 'branch_manager', 'field_officer'] },
     { name: 'Loans', path: '/loans', icon: HandCoins, roles: ['super_admin', 'branch_manager', 'field_officer', 'member'] },
     { name: 'Savings', path: '/savings', icon: PiggyBank, roles: ['super_admin', 'branch_manager', 'field_officer', 'member'] },
+    { name: 'Withdrawals', path: '/withdrawals', icon: Wallet, roles: ['super_admin', 'branch_manager', 'field_officer', 'member'] },
     { name: 'Transactions', path: '/transactions', icon: History, roles: ['super_admin', 'branch_manager', 'field_officer', 'member'] },
     { name: 'KYC Verification', path: '/kyc', icon: ShieldCheck, roles: ['super_admin', 'branch_manager', 'field_officer', 'member'] },
+    { name: 'KYC Management', path: '/verifications', icon: ShieldCheck, roles: ['super_admin'] },
     { name: 'Notifications', path: '/notification-settings', icon: Bell, roles: ['super_admin', 'branch_manager', 'field_officer', 'member'] },
+    { name: 'Notification Panel', path: '/admin-notifications', icon: Bell, roles: ['super_admin'] },
     { name: 'Settings', path: '/settings', icon: Settings, roles: ['super_admin'] },
   ];
 

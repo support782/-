@@ -1,5 +1,5 @@
 {
   "name": "eUddok Smart Samity & Microfinance",
   "description": "A comprehensive cloud-based management system for samity, microfinance, and NGOs with integrated SMS and payment gateways.",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["camera"]
 }

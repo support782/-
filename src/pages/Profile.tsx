@@ -10,17 +10,41 @@ export default function Profile() {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     displayName: '',
-    photoUrl: ''
+    photoUrl: '',
+    paymentMethods: [] as { method: string; number: string }[],
+    notificationSettings: { email: true, sms: true }
   });
 
   useEffect(() => {
     if (user) {
       setFormData({
         displayName: user.displayName || '',
-        photoUrl: user.photoUrl || ''
+        photoUrl: user.photoUrl || '',
+        paymentMethods: user.paymentMethods ? JSON.parse(user.paymentMethods) : [],
+        notificationSettings: user.notificationSettings ? JSON.parse(user.notificationSettings) : { email: true, sms: true }
       });
     }
   }, [user]);
+
+  const addPaymentMethod = () => {
+    setFormData({
+      ...formData,
+      paymentMethods: [...formData.paymentMethods, { method: 'Bkash', number: '' }]
+    });
+  };
+
+  const removePaymentMethod = (index: number) => {
+    setFormData({
+      ...formData,
+      paymentMethods: formData.paymentMethods.filter((_, i) => i !== index)
+    });
+  };
+
+  const updatePaymentMethod = (index: number, field: string, value: string) => {
+    const updated = [...formData.paymentMethods];
+    updated[index] = { ...updated[index], [field]: value };
+    setFormData({ ...formData, paymentMethods: updated });
+  };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -67,6 +91,17 @@ export default function Profile() {
         animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
       >
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-slate-900">Loan Services</h2>
+          {user.role === 'member' && (
+            <button
+              onClick={() => window.location.href = '/loans'}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all"
+            >
+              Apply for Loan
+            </button>
+          )}
+        </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div className="flex flex-col items-center space-y-4">
             <div className="relative">
@@ -110,6 +145,58 @@ export default function Profile() {
                 onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
               />
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-bold text-slate-700">Payment Methods</label>
+                <button type="button" onClick={addPaymentMethod} className="text-sm text-indigo-600 font-bold hover:text-indigo-700">+ Add Method</button>
+              </div>
+              {formData.paymentMethods.map((pm, index) => (
+                <div key={index} className="flex items-center space-x-2">
+                  <select
+                    value={pm.method}
+                    onChange={(e) => updatePaymentMethod(index, 'method', e.target.value)}
+                    className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  >
+                    <option value="Bkash">Bkash</option>
+                    <option value="Nagad">Nagad</option>
+                    <option value="Rocket">Rocket</option>
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Account Number"
+                    value={pm.number}
+                    onChange={(e) => updatePaymentMethod(index, 'number', e.target.value)}
+                    className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  />
+                  <button type="button" onClick={() => removePaymentMethod(index)} className="text-red-500 hover:text-red-600"><X size={20} /></button>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-700">Notification Settings</label>
+              <div className="flex items-center space-x-4">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.notificationSettings.email}
+                    onChange={(e) => setFormData({...formData, notificationSettings: {...formData.notificationSettings, email: e.target.checked}})}
+                    className="rounded text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm text-slate-600">Email Notifications</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.notificationSettings.sms}
+                    onChange={(e) => setFormData({...formData, notificationSettings: {...formData.notificationSettings, sms: e.target.checked}})}
+                    className="rounded text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm text-slate-600">SMS Notifications</span>
+                </label>
+              </div>
             </div>
 
             <div className="space-y-2">
