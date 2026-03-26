@@ -97,7 +97,7 @@ export default function Layout({ children }: LayoutProps) {
     return null;
   }
 
-  if (location.pathname === '/login') {
+  if (location.pathname === '/login' || location.pathname === '/') {
     return <>{children}</>;
   }
 

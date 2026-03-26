@@ -95,4 +95,5 @@ export interface GlobalSettings {
   welcomeSmsEnabled?: boolean;
   welcomeSmsText?: string;
   otpResendTimer?: number;
+  websiteName?: string;
 }

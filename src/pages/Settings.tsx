@@ -30,7 +30,8 @@ export default function Settings() {
     aiModel: 'google/gemini-2.5-flash',
     aiApiKey: '',
     welcomeSmsEnabled: false,
-    welcomeSmsText: 'Welcome to our Samity! Your account has been created successfully.'
+    welcomeSmsText: 'Welcome to our Samity! Your account has been created successfully.',
+    websiteName: 'eUddok Smart'
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -79,6 +80,29 @@ export default function Settings() {
       </div>
 
       <div className="grid grid-cols-1 gap-8">
+        {/* General Settings */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
+        >
+          <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center space-x-3">
+            <SettingsIcon className="text-indigo-600" size={20} />
+            <h2 className="font-bold text-slate-900">General Settings</h2>
+          </div>
+          <div className="p-6">
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-700">Website Name</label>
+              <input
+                type="text"
+                value={settings.websiteName}
+                onChange={(e) => setSettings({...settings, websiteName: e.target.value})}
+                className="w-full max-w-md px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              />
+            </div>
+          </div>
+        </motion.div>
+
         {/* SMS Gateway */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

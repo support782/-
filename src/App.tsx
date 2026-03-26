@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
+import axios from 'axios';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
+import Landing from './pages/Landing';
 import Login from './pages/Login';
+import Setup from './pages/Setup';
 import Dashboard from './pages/Dashboard';
 import Members from './pages/Members';
 import Branches from './pages/Branches';
@@ -22,15 +25,42 @@ import Withdrawal from './pages/Withdrawal';
 import Profile from './pages/Profile';
 
 export default function App() {
+  const [installed, setInstalled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    axios.get('/api/install/status').then(res => {
+      setInstalled(res.data.installed);
+    }).catch(() => {
+      setInstalled(false);
+    });
+  }, []);
+
+  if (installed === null) {
+    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
+
+  if (!installed) {
+    return (
+      <Router>
+        <Routes>
+          <Route path="/setup" element={<Setup />} />
+          <Route path="*" element={<Navigate to="/setup" replace />} />
+        </Routes>
+        <Toaster position="top-right" richColors />
+      </Router>
+    );
+  }
+
   return (
     <Router>
       <Toaster position="top-right" richColors />
       <Layout>
         <Routes>
+          <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/guarantor-accept/:id" element={<GuarantorAccept />} />
           
-          <Route path="/" element={
+          <Route path="/dashboard" element={
             <ProtectedRoute>
               <Dashboard />
             </ProtectedRoute>

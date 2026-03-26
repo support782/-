@@ -11,25 +11,59 @@ const JWT_SECRET = process.env.JWT_SECRET || "euddok-secret-key-12345";
 
 async function startServer() {
   console.log("Starting server...");
+  const app = express();
+  const PORT = 3000;
+
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  app.use(cookieParser());
+
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", time: new Date().toISOString() });
+  });
+
+  app.get("/api/install/status", async (req, res) => {
+    try {
+      const settings = await db.get("SELECT data FROM settings WHERE id = 'global'");
+      const globalSettings = JSON.parse(settings?.data || '{}');
+      res.json({ installed: !!globalSettings.installed });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check installation status" });
+    }
+  });
+
+  app.post("/api/install", async (req, res) => {
+    try {
+      const { websiteName, dbHost, dbUser, dbPassword, dbName } = req.body;
+      // In a real scenario, we would update the .env file or database connection
+      // For now, we'll just update the settings and mark as installed
+      const settings = await db.get("SELECT data FROM settings WHERE id = 'global'");
+      const globalSettings = JSON.parse(settings?.data || '{}');
+      globalSettings.websiteName = websiteName;
+      globalSettings.installed = true;
+      await db.run("UPDATE settings SET data = ? WHERE id = ?", [JSON.stringify(globalSettings), 'global']);
+      res.json({ message: "Installation completed" });
+    } catch (error) {
+      res.status(500).json({ error: "Installation failed" });
+    }
+  });
+
+  app.get("/api/download", (req, res) => {
+    const file = path.join(process.cwd(), 'euddok-project.zip');
+    res.download(file);
+  });
+
+  // Initialize MySQL Database
+  let pool;
+  let db: any = {
+    async get() { return null; },
+    async all() { return []; },
+    async run() { return { lastID: 0, changes: 0 }; },
+    async exec() { return; }
+  };
+
   try {
-    const app = express();
-    const PORT = 3000;
-
-    app.use(express.json({ limit: '50mb' }));
-    app.use(express.urlencoded({ limit: '50mb', extended: true }));
-    app.use(cookieParser());
-
-    app.get("/api/health", (req, res) => {
-      res.json({ status: "ok", time: new Date().toISOString() });
-    });
-
-    app.get("/api/download", (req, res) => {
-      const file = path.join(process.cwd(), 'euddok-project.zip');
-      res.download(file);
-    });
-
-    // Initialize MySQL Database
-    const pool = mysql.createPool({
+    pool = mysql.createPool({
       host: process.env.DB_HOST || 'localhost',
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASSWORD || '',
@@ -40,7 +74,7 @@ async function startServer() {
       multipleStatements: true
     });
 
-    const db = {
+    db = {
       async get(sql: string, params: any[] = []) {
         const [rows]: any = await pool.execute(sql, params);
         return rows[0];
@@ -61,8 +95,7 @@ async function startServer() {
     console.log("Database initialized.");
 
   // Create tables if they don't exist
-  try {
-    await db.exec(`
+  await db.exec(`
       CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTO_INCREMENT,
       phone VARCHAR(255) UNIQUE,
@@ -207,7 +240,9 @@ async function startServer() {
         sandboxMode: true,
         autoSmsReminders: false,
         reminderDays: 3,
-        openRouterApiKey: ''
+        openRouterApiKey: '',
+        websiteName: 'eUddok Smart',
+        installed: false
       };
       await db.run("INSERT INTO settings (id, data) VALUES (?, ?)", ['global', JSON.stringify(defaultSettings)]);
       console.log("Default settings initialized.");
@@ -1450,10 +1485,6 @@ async function startServer() {
       }
     }, 1000 * 60 * 60 * 24); // Run once every 24 hours
   });
-  } catch (error) {
-    console.error("Error in startServer:", error);
-    process.exit(1);
-  }
 }
 
 process.on('unhandledRejection', (reason, promise) => {
