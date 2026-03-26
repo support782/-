@@ -17,7 +17,7 @@ export default function AdminNotifications() {
   const fetchSettings = async () => {
     try {
       const response = await axios.get('/api/settings');
-      setSettings(response.data.settings);
+      setSettings(response.data);
     } catch (error) {
       toast.error('Failed to fetch settings');
     } finally {

@@ -2,8 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import axios from "axios";
-import sqlite3 from "sqlite3";
-import { open } from "sqlite";
+import mysql from "mysql2/promise";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
@@ -24,119 +23,152 @@ async function startServer() {
       res.json({ status: "ok", time: new Date().toISOString() });
     });
 
-    // Initialize SQLite Database
-    const db = await open({
-      filename: "./database.sqlite",
-      driver: sqlite3.Database,
+    app.get("/api/download", (req, res) => {
+      const file = path.join(process.cwd(), 'euddok-project.zip');
+      res.download(file);
     });
+
+    // Initialize MySQL Database
+    const pool = mysql.createPool({
+      host: process.env.DB_HOST || 'localhost',
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || '',
+      database: process.env.DB_NAME || 'euddok_db',
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0,
+      multipleStatements: true
+    });
+
+    const db = {
+      async get(sql: string, params: any[] = []) {
+        const [rows]: any = await pool.execute(sql, params);
+        return rows[0];
+      },
+      async all(sql: string, params: any[] = []) {
+        const [rows]: any = await pool.execute(sql, params);
+        return rows;
+      },
+      async run(sql: string, params: any[] = []) {
+        const [result]: any = await pool.execute(sql, params);
+        return { lastID: result.insertId, changes: result.affectedRows };
+      },
+      async exec(sql: string) {
+        await pool.query(sql);
+      }
+    };
+
     console.log("Database initialized.");
 
   // Create tables if they don't exist
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      phone TEXT UNIQUE,
+  try {
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTO_INCREMENT,
+      phone VARCHAR(255) UNIQUE,
       password TEXT,
       displayName TEXT,
       photoUrl TEXT,
-      role TEXT DEFAULT 'member',
-      status TEXT DEFAULT 'active',
-      paymentMethods TEXT DEFAULT '[]',
-      notificationSettings TEXT DEFAULT '{"email": true, "sms": true}',
+      role VARCHAR(50) DEFAULT 'member',
+      status VARCHAR(50) DEFAULT 'active',
+      paymentMethods TEXT,
+      notificationSettings TEXT,
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS branches (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id INTEGER PRIMARY KEY AUTO_INCREMENT,
       name TEXT,
-      code TEXT UNIQUE,
+      code VARCHAR(255) UNIQUE,
       address TEXT,
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS members (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      memberId TEXT UNIQUE,
+      id INTEGER PRIMARY KEY AUTO_INCREMENT,
+      memberId VARCHAR(255) UNIQUE,
       name TEXT,
-      phone TEXT UNIQUE,
-      nid TEXT UNIQUE,
+      phone VARCHAR(255) UNIQUE,
+      nid VARCHAR(255) UNIQUE,
       address TEXT,
       photoUrl TEXT,
       nomineeName TEXT,
       nomineeRelation TEXT,
       branchId INTEGER,
-      status TEXT DEFAULT 'active',
+      status VARCHAR(50) DEFAULT 'active',
+      kycStatus VARCHAR(50) DEFAULT 'pending',
+      aiVerificationResult TEXT,
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (branchId) REFERENCES branches(id)
     );
 
     CREATE TABLE IF NOT EXISTS loans (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      memberId TEXT,
-      amount REAL,
-      serviceCharge REAL,
-      totalPayable REAL,
-      paidAmount REAL DEFAULT 0,
-      installmentType TEXT,
+      id INTEGER PRIMARY KEY AUTO_INCREMENT,
+      memberId VARCHAR(255),
+      amount DOUBLE,
+      serviceCharge DOUBLE,
+      totalPayable DOUBLE,
+      paidAmount DOUBLE DEFAULT 0,
+      installmentType VARCHAR(50),
       installments INTEGER,
-      status TEXT DEFAULT 'pending',
-      branchId TEXT,
+      status VARCHAR(50) DEFAULT 'pending',
+      branchId VARCHAR(255),
       applicationDate DATETIME DEFAULT CURRENT_TIMESTAMP,
-      approvalDate DATETIME,
+      approvalDate DATETIME NULL,
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      memberId TEXT,
-      type TEXT,
-      amount REAL,
-      method TEXT,
-      loanId TEXT,
+      id INTEGER PRIMARY KEY AUTO_INCREMENT,
+      memberId VARCHAR(255),
+      type VARCHAR(50),
+      amount DOUBLE,
+      method VARCHAR(50),
+      loanId VARCHAR(255),
       savingsAccountId INTEGER,
-      branchId TEXT,
+      branchId VARCHAR(255),
       fieldOfficerId INTEGER,
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS savings_accounts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      memberId TEXT,
-      type TEXT,
-      balance REAL DEFAULT 0,
-      status TEXT DEFAULT 'active',
+      id INTEGER PRIMARY KEY AUTO_INCREMENT,
+      memberId VARCHAR(255),
+      type VARCHAR(50),
+      balance DOUBLE DEFAULT 0,
+      status VARCHAR(50) DEFAULT 'active',
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS withdrawals (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id INTEGER PRIMARY KEY AUTO_INCREMENT,
       userId INTEGER,
-      amount REAL,
-      method TEXT,
-      accountNumber TEXT,
-      status TEXT DEFAULT 'pending',
+      amount DOUBLE,
+      method VARCHAR(50),
+      accountNumber VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'pending',
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (userId) REFERENCES users(id)
     );
 
     CREATE TABLE IF NOT EXISTS loan_requests (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      memberId TEXT,
-      amount REAL,
-      serviceCharge REAL,
-      installmentType TEXT,
+      id INTEGER PRIMARY KEY AUTO_INCREMENT,
+      memberId VARCHAR(255),
+      amount DOUBLE,
+      serviceCharge DOUBLE,
+      installmentType VARCHAR(50),
       installments INTEGER,
       applicationDate DATETIME DEFAULT CURRENT_TIMESTAMP,
-      guarantorMobile TEXT,
+      guarantorMobile VARCHAR(255),
       guarantorAccepted BOOLEAN DEFAULT 0,
-      status TEXT DEFAULT 'pending',
+      status VARCHAR(50) DEFAULT 'pending',
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS kyc_data (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id INTEGER PRIMARY KEY AUTO_INCREMENT,
       userId INTEGER UNIQUE,
-      status TEXT DEFAULT 'pending',
+      status VARCHAR(50) DEFAULT 'pending',
       nidFrontUrl TEXT,
       nidBackUrl TEXT,
       selfieUrl TEXT,
@@ -146,7 +178,7 @@ async function startServer() {
     );
 
     CREATE TABLE IF NOT EXISTS notification_settings (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id INTEGER PRIMARY KEY AUTO_INCREMENT,
       userId INTEGER UNIQUE,
       depositEnabled BOOLEAN DEFAULT 1,
       loanEnabled BOOLEAN DEFAULT 1,
@@ -155,7 +187,7 @@ async function startServer() {
     );
 
     CREATE TABLE IF NOT EXISTS settings (
-      id TEXT PRIMARY KEY,
+      id VARCHAR(255) PRIMARY KEY,
       data TEXT
     );
   `);
@@ -208,12 +240,15 @@ async function startServer() {
 
     // Migration: Add kycStatus and aiVerificationResult to members
     try {
-      await db.exec("ALTER TABLE members ADD COLUMN kycStatus TEXT DEFAULT 'pending'");
+      await db.exec("ALTER TABLE members ADD COLUMN kycStatus VARCHAR(50) DEFAULT 'pending'");
       await db.exec("ALTER TABLE members ADD COLUMN aiVerificationResult TEXT");
       console.log("Added KYC columns to members table.");
     } catch (e: any) {
       // Columns might already exist
     }
+  } catch (dbError) {
+    console.error("Failed to initialize database. Please check your MySQL configuration.", dbError);
+  }
 
   // Auth Middleware
   const authenticateToken = (req: any, res: any, next: any) => {
@@ -313,7 +348,7 @@ async function startServer() {
 
       res.json({ user });
     } catch (error: any) {
-      if (error.message.includes("UNIQUE constraint failed")) {
+      if (error.message.includes("UNIQUE constraint failed") || error.message.includes("Duplicate entry")) {
         return res.status(400).json({ error: "Phone number already exists" });
       }
       res.status(500).json({ error: "Registration failed" });
@@ -376,7 +411,7 @@ async function startServer() {
 
       res.json({ user });
     } catch (error: any) {
-      if (error.message.includes("UNIQUE constraint failed")) {
+      if (error.message.includes("UNIQUE constraint failed") || error.message.includes("Duplicate entry")) {
         return res.status(400).json({ error: "Phone number already exists" });
       }
       res.status(500).json({ error: "Registration failed" });
@@ -555,7 +590,7 @@ async function startServer() {
       );
       res.json({ id: result.lastID, name, code, address });
     } catch (error: any) {
-      if (error.message.includes("UNIQUE constraint failed")) {
+      if (error.message.includes("UNIQUE constraint failed") || error.message.includes("Duplicate entry")) {
         return res.status(400).json({ error: "Branch code already exists" });
       }
       res.status(500).json({ error: "Failed to create branch" });
@@ -644,7 +679,7 @@ async function startServer() {
       );
       res.json({ id: result.lastID, memberId, name, phone, nid, address, branchId, nomineeName, nomineeRelation, photoUrl });
     } catch (error: any) {
-      if (error.message.includes("UNIQUE constraint failed")) {
+      if (error.message.includes("UNIQUE constraint failed") || error.message.includes("Duplicate entry")) {
         return res.status(400).json({ error: "Phone or NID already exists" });
       }
       res.status(500).json({ error: "Failed to create member" });
