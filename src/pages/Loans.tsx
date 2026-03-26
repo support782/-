@@ -66,6 +66,10 @@ export default function Loans() {
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [requestFormData, setRequestFormData] = useState({
     amount: 0,
+    serviceCharge: 10,
+    installmentType: 'weekly' as 'daily' | 'weekly' | 'monthly',
+    installments: 46,
+    applicationDate: new Date().toISOString().split('T')[0],
     guarantorMobile: ''
   });
 
@@ -96,12 +100,25 @@ export default function Loans() {
       });
       toast.success('Loan request submitted successfully');
       setIsRequestModalOpen(false);
-      setRequestFormData({ amount: 0, guarantorMobile: '' });
+      setRequestFormData({
+        amount: 0,
+        serviceCharge: 10,
+        installmentType: 'weekly',
+        installments: 46,
+        applicationDate: new Date().toISOString().split('T')[0],
+        guarantorMobile: ''
+      });
     } catch (error) {
       toast.error('Failed to submit loan request');
     } finally {
       setLoading(false);
     }
+  };
+
+  const calculateRequestTotal = () => {
+    const principal = Number(requestFormData.amount);
+    const charge = (principal * requestFormData.serviceCharge) / 100;
+    return principal + charge;
   };
 
   const fetchData = async () => {
@@ -586,9 +603,19 @@ export default function Loans() {
                 </button>
               </div>
               <form onSubmit={handleRequestLoan} className="p-6 space-y-6">
-                <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-bold text-slate-700">Requested Amount</label>
+                    <label className="text-sm font-bold text-slate-700">Application Date</label>
+                    <input
+                      type="date"
+                      required
+                      value={requestFormData.applicationDate}
+                      onChange={(e) => setRequestFormData({...requestFormData, applicationDate: e.target.value})}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-700">Principal Amount</label>
                     <input
                       type="number"
                       required
@@ -598,9 +625,46 @@ export default function Loans() {
                       placeholder="৳0.00"
                     />
                   </div>
-                  
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-bold text-slate-700">Guarantor Mobile Number</label>
+                    <label className="text-sm font-bold text-slate-700">Service Charge (%)</label>
+                    <input
+                      type="number"
+                      required
+                      value={requestFormData.serviceCharge}
+                      onChange={(e) => setRequestFormData({...requestFormData, serviceCharge: Number(e.target.value)})}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-700">Installment Type</label>
+                    <select
+                      value={requestFormData.installmentType}
+                      onChange={(e) => setRequestFormData({...requestFormData, installmentType: e.target.value as any})}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    >
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-700">No. of Installments</label>
+                    <input
+                      type="number"
+                      required
+                      value={requestFormData.installments}
+                      onChange={(e) => setRequestFormData({...requestFormData, installments: Number(e.target.value)})}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-700">Guarantor Mobile</label>
                     <input
                       type="text"
                       required
@@ -609,6 +673,17 @@ export default function Loans() {
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                       placeholder="Enter guarantor mobile number"
                     />
+                  </div>
+                </div>
+
+                <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium text-emerald-600">Total Payable</span>
+                    <span className="text-lg font-bold text-emerald-700">৳{calculateRequestTotal().toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-emerald-500">Per Installment</span>
+                    <span className="text-sm font-bold text-emerald-600">৳{(calculateRequestTotal() / requestFormData.installments).toFixed(2)}</span>
                   </div>
                 </div>
 

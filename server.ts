@@ -123,6 +123,10 @@ async function startServer() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       memberId TEXT,
       amount REAL,
+      serviceCharge REAL,
+      installmentType TEXT,
+      installments INTEGER,
+      applicationDate DATETIME DEFAULT CURRENT_TIMESTAMP,
       guarantorMobile TEXT,
       guarantorAccepted BOOLEAN DEFAULT 0,
       status TEXT DEFAULT 'pending',
@@ -781,11 +785,11 @@ async function startServer() {
 
   // Loan request routes
   app.post("/api/loan-requests", authenticateToken, async (req, res) => {
-    const { memberId, amount, guarantorMobile } = req.body;
+    const { memberId, amount, serviceCharge, installmentType, installments, applicationDate, guarantorMobile } = req.body;
     try {
       const result = await db.run(
-        "INSERT INTO loan_requests (memberId, amount, guarantorMobile) VALUES (?, ?, ?)",
-        [memberId, amount, guarantorMobile]
+        "INSERT INTO loan_requests (memberId, amount, serviceCharge, installmentType, installments, applicationDate, guarantorMobile) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [memberId, amount, serviceCharge, installmentType, installments, applicationDate || new Date().toISOString(), guarantorMobile]
       );
       
       // Send notification to guarantor
@@ -804,7 +808,7 @@ async function startServer() {
         console.error("Failed to send guarantor SMS:", smsError.response?.data || smsError.message);
       }
 
-      res.json({ id: result.lastID, memberId, amount, guarantorMobile, status: 'pending' });
+      res.json({ id: result.lastID, memberId, amount, serviceCharge, installmentType, installments, applicationDate, guarantorMobile, status: 'pending' });
     } catch (error) {
       res.status(500).json({ error: "Failed to submit loan request" });
     }

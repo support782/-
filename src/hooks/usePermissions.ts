@@ -3,7 +3,7 @@ import axios from 'axios';
 import { UserProfile, UserRole } from '../types';
 
 export type Action = 'create' | 'read' | 'update' | 'delete' | 'approve' | 'reject';
-export type Resource = 'members' | 'loans' | 'savings' | 'transactions' | 'branches' | 'settings';
+export type Resource = 'members' | 'loans' | 'savings' | 'transactions' | 'branches' | 'settings' | 'withdrawals';
 
 const rolePermissions: Record<UserRole, Record<Resource, Action[]>> = {
   super_admin: {
@@ -13,6 +13,7 @@ const rolePermissions: Record<UserRole, Record<Resource, Action[]>> = {
     transactions: ['create', 'read', 'update', 'delete'],
     branches: ['create', 'read', 'update', 'delete'],
     settings: ['create', 'read', 'update', 'delete'],
+    withdrawals: ['create', 'read', 'update', 'delete', 'approve', 'reject'],
   },
   branch_manager: {
     members: ['create', 'read', 'update', 'approve', 'reject'],
@@ -21,6 +22,7 @@ const rolePermissions: Record<UserRole, Record<Resource, Action[]>> = {
     transactions: ['create', 'read', 'update'],
     branches: ['read'],
     settings: ['read'],
+    withdrawals: ['create', 'read', 'update', 'approve', 'reject'],
   },
   field_officer: {
     members: ['create', 'read', 'update'],
@@ -29,6 +31,7 @@ const rolePermissions: Record<UserRole, Record<Resource, Action[]>> = {
     transactions: ['create', 'read'],
     branches: ['read'],
     settings: [],
+    withdrawals: ['create', 'read'],
   },
   member: {
     members: ['read'],
@@ -37,6 +40,7 @@ const rolePermissions: Record<UserRole, Record<Resource, Action[]>> = {
     transactions: ['read'],
     branches: ['read'],
     settings: [],
+    withdrawals: ['read'],
   }
 };
 

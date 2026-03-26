@@ -9,7 +9,11 @@ export default function LoanRequest() {
   const [mobile, setMobile] = useState('');
   const [member, setMember] = useState<any>(null);
   const [formData, setFormData] = useState({
-    amount: '',
+    amount: 0,
+    serviceCharge: 10,
+    installmentType: 'weekly' as 'daily' | 'weekly' | 'monthly',
+    installments: 46,
+    applicationDate: new Date().toISOString().split('T')[0],
     guarantorMobile: ''
   });
 
@@ -38,11 +42,17 @@ export default function LoanRequest() {
     try {
       await axios.post('/api/loan-requests', {
         memberId: member.memberId,
-        amount: Number(formData.amount),
-        guarantorMobile: formData.guarantorMobile
+        ...formData
       });
       toast.success('Loan request submitted successfully. Guarantor notified.');
-      setFormData({ amount: '', guarantorMobile: '' });
+      setFormData({
+        amount: 0,
+        serviceCharge: 10,
+        installmentType: 'weekly',
+        installments: 46,
+        applicationDate: new Date().toISOString().split('T')[0],
+        guarantorMobile: ''
+      });
       setMember(null);
       setMobile('');
     } catch (error) {
@@ -50,6 +60,12 @@ export default function LoanRequest() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const calculateTotal = () => {
+    const principal = Number(formData.amount);
+    const charge = (principal * formData.serviceCharge) / 100;
+    return principal + charge;
   };
 
   return (
@@ -91,29 +107,91 @@ export default function LoanRequest() {
           </motion.div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-700">Loan Amount</label>
-            <input
-              type="number"
-              required
-              value={formData.amount}
-              onChange={(e) => setFormData({...formData, amount: e.target.value})}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-              placeholder="৳0.00"
-            />
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-700">Application Date</label>
+              <input
+                type="date"
+                required
+                value={formData.applicationDate}
+                onChange={(e) => setFormData({...formData, applicationDate: e.target.value})}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-700">Principal Amount</label>
+              <input
+                type="number"
+                required
+                value={formData.amount}
+                onChange={(e) => setFormData({...formData, amount: Number(e.target.value)})}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                placeholder="৳0.00"
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-700">Guarantor Mobile Number</label>
-            <input
-              type="text"
-              required
-              value={formData.guarantorMobile}
-              onChange={(e) => setFormData({...formData, guarantorMobile: e.target.value})}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-              placeholder="Enter guarantor mobile number"
-            />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-700">Service Charge (%)</label>
+              <input
+                type="number"
+                required
+                value={formData.serviceCharge}
+                onChange={(e) => setFormData({...formData, serviceCharge: Number(e.target.value)})}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-700">Installment Type</label>
+              <select
+                value={formData.installmentType}
+                onChange={(e) => setFormData({...formData, installmentType: e.target.value as any})}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              >
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-700">No. of Installments</label>
+              <input
+                type="number"
+                required
+                value={formData.installments}
+                onChange={(e) => setFormData({...formData, installments: Number(e.target.value)})}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-700">Guarantor Mobile</label>
+              <input
+                type="text"
+                required
+                value={formData.guarantorMobile}
+                onChange={(e) => setFormData({...formData, guarantorMobile: e.target.value})}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                placeholder="Enter guarantor mobile number"
+              />
+            </div>
+          </div>
+
+          <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-indigo-600">Total Payable</span>
+              <span className="text-lg font-bold text-indigo-700">৳{calculateTotal().toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-indigo-500">Per Installment</span>
+              <span className="text-sm font-bold text-indigo-600">৳{(calculateTotal() / formData.installments).toFixed(2)}</span>
+            </div>
+          </div>
+
           <button
             type="submit"
             disabled={loading || !member}

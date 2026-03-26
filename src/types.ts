@@ -10,6 +10,8 @@ export interface UserProfile {
   status: 'active' | 'inactive';
   kycStatus?: 'pending' | 'verified' | 'rejected';
   aiVerificationResult?: string;
+  paymentMethods?: string;
+  notificationSettings?: string;
 }
 
 export interface Branch {
