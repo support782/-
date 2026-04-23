@@ -1,0 +1,238 @@
+:root {
+    /* CSS4 Color Mix Examples */
+    --primary-light: color-mix(in srgb, var(--primary), white 30%);
+    --primary-dark: color-mix(in srgb, var(--primary), black 20%);
+}
+
+/* Container Queries - CSS4 Feature */
+.menu-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.menu-card-container {
+    container-type: inline-size;
+    container-name: menu-card;
+}
+
+@container menu-card (min-width: 300px) {
+    .menu-card {
+        flex-direction: row;
+    }
+    
+    .menu-card img {
+        width: 150px;
+        height: 150px;
+    }
+}
+
+/* :has() Selector - CSS4 Feature */
+.order-item:has(.status-delayed) {
+    border-left: 4px solid var(--danger);
+    background: color-mix(in srgb, var(--danger), transparent 95%);
+}
+
+.order-item:has(.status-ready) {
+    border-left: 4px solid var(--secondary);
+}
+
+.form-group:has(input:invalid) {
+    border-color: var(--danger);
+}
+
+.form-group:has(input:focus) {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary), transparent 80%);
+}
+
+/* Subgrid - CSS4 Feature */
+.order-table {
+    display: grid;
+    grid-template-columns: subgrid;
+}
+
+/* Card Styles */
+.menu-card {
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.menu-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+}
+
+.menu-card img {
+    width: 100%;
+    aspect-ratio: 16/9;
+    object-fit: cover;
+    loading: lazy;
+}
+
+.menu-card-body {
+    padding: 1rem;
+}
+
+.menu-card-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.menu-card-price {
+    color: var(--primary);
+    font-weight: 700;
+    font-size: 1.25rem;
+}
+
+/* Order Status Badges */
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.status-pending {
+    background: color-mix(in srgb, var(--warning), transparent 80%);
+    color: var(--warning);
+}
+
+.status-preparing {
+    background: color-mix(in srgb, var(--primary), transparent 80%);
+    color: var(--primary);
+}
+
+.status-ready {
+    background: color-mix(in srgb, var(--secondary), transparent 80%);
+    color: var(--secondary);
+}
+
+.status-delivered {
+    background: color-mix(in srgb, var(--gray-700), transparent 80%);
+    color: var(--gray-700);
+}
+
+/* Kitchen Display System */
+.kitchen-board {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1rem;
+}
+
+.kitchen-card {
+    background: white;
+    border-radius: var(--radius);
+    padding: 1rem;
+    border: 2px solid var(--gray-200);
+}
+
+.kitchen-card.urgent {
+    border-color: var(--danger);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Install Prompt */
+.install-prompt {
+    position: fixed;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--gray-900);
+    color: white;
+    padding: 1rem 2rem;
+    border-radius: var(--radius);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    z-index: 1000;
+}
+
+.install-prompt.hidden {
+    display: none;
+}
+
+.install-prompt-content {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+/* Toast Notifications */
+.toast {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    background: white;
+    padding: 1rem 1.5rem;
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    z-index: 1001;
+    animation: slideIn 0.3s ease;
+}
+
+.toast.hidden {
+    display: none;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Loading Skeleton */
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--gray-100) 25%,
+        var(--gray-200) 50%,
+        var(--gray-100) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Responsive Utilities */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 0.75rem;
+    }
+    
+    .menu-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .kitchen-board {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .no-print {
+        display: none !important;
+    }
+    
+    body {
+        background: white;
+    }
+}

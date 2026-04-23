@@ -1,8 +1,40 @@
-node_modules/
-build/
-dist/
-coverage/
-.DS_Store
+```
+# Dependencies
+vendor/
+
+# Logs
 *.log
-.env*
-!.env.example
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+target/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# PHP specific
+*.php~
+.htaccess
+
+# Cache directories
+.cache/
+__pycache__/
+*.pyc
+
+# Temporary files
+*.tmp
+*.temp
+```
